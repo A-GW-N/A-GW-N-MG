@@ -1,4 +1,4 @@
-name: Build And Release Assets
+name: Build, Package, and Publish
 
 on:
   push:
@@ -9,9 +9,66 @@ on:
   pull_request:
   workflow_dispatch:
 
+concurrency:
+  group: build-release-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+
 jobs:
-  source-package:
-    name: Source Package
+  verify-build:
+    name: Verify Web and Go Build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.10.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.0"
+
+      - name: Install web dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Lint web application
+        run: pnpm lint
+
+      - name: Build web application
+        run: pnpm build
+        env:
+          ADMIN_PASSWORD: ci-admin-password
+          GATEWAY_API_KEYS: sk-ci-fallback-key
+          GATEWAY_KEY_ENCRYPTION_SECRET: ci-gateway-key-encryption-secret-please-change
+          GO_PROXY_BASE_URL: http://127.0.0.1:8081
+          LINUXDO_OAUTH_CALLBACK_URL: http://localhost:3000/api/user/oauth/linuxdo/callback
+          LINUXDO_OAUTH_CLIENT_ID: ci-linuxdo-client-id
+          LINUXDO_OAUTH_CLIENT_SECRET: ci-linuxdo-client-secret
+          NEXT_TELEMETRY_DISABLED: "1"
+          SUPABASE_PUBLISHABLE_OR_ANON_KEY: ci-supabase-anon-key
+          SUPABASE_SERVICE_ROLE_KEY: ci-supabase-service-role-key
+          SUPABASE_URL: https://example.supabase.co
+
+      - name: Build Go proxy
+        working-directory: backend/go-proxy
+        run: go build ./...
+
+  package-bundles:
+    name: Package Source and Deploy Bundles
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -30,51 +87,111 @@ jobs:
             VERSION="${GITHUB_SHA::7}"
           fi
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-          echo "archive_name=A-GW-N-MG-source-${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "source_archive_name=A-GW-N-MG-source-${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "deploy_archive_name=A-GW-N-MG-deploy-${VERSION}" >> "$GITHUB_OUTPUT"
 
       - name: Create source tarball
         shell: bash
         run: |
-          git archive --format=tar.gz --output "${{ steps.vars.outputs.archive_name }}.tar.gz" HEAD
+          git archive \
+            --format=tar.gz \
+            --prefix "${{ steps.vars.outputs.source_archive_name }}/" \
+            --output "${{ steps.vars.outputs.source_archive_name }}.tar.gz" \
+            HEAD
 
       - name: Create source zip
         shell: bash
         run: |
-          git archive --format=zip --output "${{ steps.vars.outputs.archive_name }}.zip" HEAD
+          git archive \
+            --format=zip \
+            --prefix "${{ steps.vars.outputs.source_archive_name }}/" \
+            --output "${{ steps.vars.outputs.source_archive_name }}.zip" \
+            HEAD
 
-      - name: Upload source packages
+      - name: Create deploy bundle
+        shell: bash
+        run: |
+          DEPLOY_DIR="${{ steps.vars.outputs.deploy_archive_name }}"
+          mkdir -p "${DEPLOY_DIR}/docker" "${DEPLOY_DIR}/supabase"
+          cp Dockerfile docker-compose.yml .env.example README.md LICENSE NOTICE "${DEPLOY_DIR}/"
+          cp docker/start-all.sh "${DEPLOY_DIR}/docker/start-all.sh"
+          cp supabase/schema.sql "${DEPLOY_DIR}/supabase/schema.sql"
+
+      - name: Create deploy tarball
+        shell: bash
+        run: |
+          tar -czf "${{ steps.vars.outputs.deploy_archive_name }}.tar.gz" "${{ steps.vars.outputs.deploy_archive_name }}"
+
+      - name: Create deploy zip
+        shell: bash
+        run: |
+          zip -r "${{ steps.vars.outputs.deploy_archive_name }}.zip" "${{ steps.vars.outputs.deploy_archive_name }}"
+
+      - name: Upload release bundles
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.vars.outputs.archive_name }}
+          name: release-bundles-${{ steps.vars.outputs.version }}
           path: |
-            ${{ steps.vars.outputs.archive_name }}.tar.gz
-            ${{ steps.vars.outputs.archive_name }}.zip
+            ${{ steps.vars.outputs.source_archive_name }}.tar.gz
+            ${{ steps.vars.outputs.source_archive_name }}.zip
+            ${{ steps.vars.outputs.deploy_archive_name }}.tar.gz
+            ${{ steps.vars.outputs.deploy_archive_name }}.zip
           if-no-files-found: error
           retention-days: 30
 
   docker-build:
-    name: Docker Build
+    name: Build and Publish Docker Image
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      packages: write
+    needs:
+      - verify-build
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Normalize image name
+        id: image
+        shell: bash
+        run: |
+          echo "name=${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ steps.image.outputs.name }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=tag
+            type=sha,prefix=sha-
+            type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build application image
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile
+          labels: ${{ steps.meta.outputs.labels }}
           load: false
-          push: false
           cache-from: type=gha
           cache-to: type=gha,mode=max
           platforms: linux/amd64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
 
   docker-image-artifact:
     name: Docker Image Artifact
@@ -89,6 +206,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Normalize image name
+        id: image
+        shell: bash
+        run: |
+          echo "name=${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -97,7 +220,7 @@ jobs:
         shell: bash
         run: |
           echo "version=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
-          echo "image_name=agwn-nexus-core:${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          echo "image_name=ghcr.io/${{ steps.image.outputs.name }}:${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
           echo "archive_name=A-GW-N-MG-docker-${GITHUB_REF_NAME}.tar" >> "$GITHUB_OUTPUT"
 
       - name: Build Docker image archive
@@ -118,3 +241,27 @@ jobs:
           path: ${{ steps.vars.outputs.archive_name }}
           if-no-files-found: error
           retention-days: 30
+
+  github-release:
+    name: Publish GitHub Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    needs:
+      - package-bundles
+      - docker-image-artifact
+
+    steps:
+      - name: Download release assets
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            dist/release-bundles-${{ github.ref_name }}/*
+            dist/docker-image-${{ github.ref_name }}/*
