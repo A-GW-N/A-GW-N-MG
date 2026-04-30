@@ -150,10 +150,22 @@ go build ./...
 - `Dockerfile`
 - `docker-compose.yml`
 
-启动：
+本地从源码构建并启动：
 
 ```bash
 docker compose up -d --build
+```
+
+使用已发布镜像启动：
+
+```bash
+APP_IMAGE=ghcr.io/<owner>/<repo>:latest docker compose up -d
+```
+
+或指定 tag：
+
+```bash
+APP_IMAGE=ghcr.io/<owner>/<repo>:v1.22.0 docker compose up -d
 ```
 
 停止：
@@ -164,9 +176,16 @@ docker compose down
 
 GitHub Actions 会自动执行：
 
-- `main` 分支提交时校验 Docker 构建
-- 自动生成源码包 artifact（`.tar.gz` 与 `.zip`）
-- 推送 `v*` tag 时额外生成可下载的 Docker 镜像包（`.tar`）
+- PR、`main` 分支提交、手动触发时执行 Web/Go 构建校验
+- `main` 分支与 `v*` tag 自动构建 Docker 镜像并推送到 `GHCR`
+- 自动生成源码包与部署包 artifact（`.tar.gz` 与 `.zip`）
+- 推送 `v*` tag 时自动创建 GitHub Release，并附带 Docker 镜像包（`.tar`）
+
+发布产物包括：
+
+- 源码包：完整仓库快照
+- 部署包：`Dockerfile`、`docker-compose.yml`、`.env.example`、`supabase/schema.sql` 等部署必需文件
+- Docker 镜像：`ghcr.io/<owner>/<repo>:latest`、`ghcr.io/<owner>/<repo>:v*`
 
 部署后统一从主站域名调用：
 
