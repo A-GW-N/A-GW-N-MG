@@ -1,0 +1,48 @@
+# Dependencies
+node_modules
+.pnpm-store
+pnpm-lock.yaml
+
+# Build outputs
+.next
+out
+dist
+
+# Git
+.git
+.gitignore
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# Environment (不应打包进镜像)
+.env
+.env.local
+.env.*.local
+
+# Misc
+*.log
+*.err.log
+npm-debug.log*
+pnpm-debug.log*
+.DS_Store
+Thumbs.db
+.gopath
+
+# Test
+coverage
+.nyc_output
+
+# Cloudflare (与 Docker 无关)
+.wrangler
+.open-next
+
+# Local-only project metadata
+.claude
+openspec
+docs
+CLAUDE.md
+AGENTS.md

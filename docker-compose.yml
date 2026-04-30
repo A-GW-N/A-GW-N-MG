@@ -1,0 +1,20 @@
+name: agwn-nexus-core
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: agwn-nexus-core
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      HOSTNAME: 0.0.0.0
+      PORT: 3000
+      GO_PROXY_BASE_URL: http://127.0.0.1:8081
+      GO_PROXY_HOST: 127.0.0.1
+      GO_PROXY_PORT: 8081
+    ports:
+      - "3000:3000"

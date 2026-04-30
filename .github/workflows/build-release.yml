@@ -1,0 +1,120 @@
+name: Build And Release Assets
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  source-package:
+    name: Source Package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set package variables
+        id: vars
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            VERSION="${GITHUB_REF_NAME}"
+          else
+            VERSION="${GITHUB_SHA::7}"
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "archive_name=A-GW-N-MG-source-${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Create source tarball
+        shell: bash
+        run: |
+          git archive --format=tar.gz --output "${{ steps.vars.outputs.archive_name }}.tar.gz" HEAD
+
+      - name: Create source zip
+        shell: bash
+        run: |
+          git archive --format=zip --output "${{ steps.vars.outputs.archive_name }}.zip" HEAD
+
+      - name: Upload source packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.vars.outputs.archive_name }}
+          path: |
+            ${{ steps.vars.outputs.archive_name }}.tar.gz
+            ${{ steps.vars.outputs.archive_name }}.zip
+          if-no-files-found: error
+          retention-days: 30
+
+  docker-build:
+    name: Docker Build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build application image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          load: false
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64
+
+  docker-image-artifact:
+    name: Docker Image Artifact
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    needs:
+      - docker-build
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Set image variables
+        id: vars
+        shell: bash
+        run: |
+          echo "version=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          echo "image_name=agwn-nexus-core:${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          echo "archive_name=A-GW-N-MG-docker-${GITHUB_REF_NAME}.tar" >> "$GITHUB_OUTPUT"
+
+      - name: Build Docker image archive
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          tags: ${{ steps.vars.outputs.image_name }}
+          outputs: type=docker,dest=${{ steps.vars.outputs.archive_name }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64
+
+      - name: Upload Docker image archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-image-${{ steps.vars.outputs.version }}
+          path: ${{ steps.vars.outputs.archive_name }}
+          if-no-files-found: error
+          retention-days: 30

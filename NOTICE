@@ -1,0 +1,10 @@
+This project includes original work and customized integrations for A-GW-N.
+
+Portions of the codebase were inspired by or adapted from the following upstream projects:
+
+- https://github.com/BingZi-233/check-cx
+- https://github.com/router-for-me/CLIProxyAPI
+- https://github.com/linux-do/credit
+
+This repository is not an official distribution of those upstream projects.
+Please review the upstream repositories for their own licenses, notices, and attribution requirements.
