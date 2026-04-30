@@ -2,6 +2,7 @@ name: agwn-nexus-core
 
 services:
   app:
+    image: ${APP_IMAGE:-agwn-nexus-core:local}
     build:
       context: .
       dockerfile: Dockerfile
