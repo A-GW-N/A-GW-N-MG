@@ -11,9 +11,9 @@
 !.yarn/releases
 !.yarn/versions
 
-/docker
+
 /coverage
-/scripts
+
 
 # next.js
 /.next/
