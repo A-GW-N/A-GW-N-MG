@@ -1,6 +1,6 @@
-# A-GW-N Nexus Core
+# A-GW-N-MG
 
-A-GW-N Nexus Core 是一个基于 `Next.js + React + Go + PostgreSQL/Supabase` 的一体化 AI 网关与状态面板项目。
+A-GW-N-MG是一个基于 `Next.js + React + Go + PostgreSQL/Supabase` 的一体化 AI 网关与状态面板项目。
 
 它把几类能力合并到了同一个仓库里：
 
