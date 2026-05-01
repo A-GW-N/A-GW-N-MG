@@ -31,6 +31,15 @@ export interface AccountPoolRegistryInput {
   is_enabled: boolean;
 }
 
+function slugifyPoolKey(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "-")
+    .replace(/-{2,}/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
 function normalizeGatewayProfile(profile: GatewayProfileInput): GatewayProfileInput {
   return {
     profile_key: profile.profile_key.trim(),
@@ -50,10 +59,14 @@ function normalizeGatewayProfile(profile: GatewayProfileInput): GatewayProfileIn
 }
 
 function normalizePoolRegistry(input: AccountPoolRegistryInput): AccountPoolRegistryInput {
+  const tableName = input.table_name.trim();
+  const displayName = input.display_name.trim();
+  const fallbackKey = slugifyPoolKey(tableName) || slugifyPoolKey(displayName) || "pool";
+
   return {
-    pool_key: input.pool_key.trim(),
-    table_name: input.table_name.trim(),
-    display_name: input.display_name.trim() || input.pool_key.trim(),
+    pool_key: slugifyPoolKey(input.pool_key) || fallbackKey,
+    table_name: tableName,
+    display_name: displayName || tableName || fallbackKey,
     brand: input.brand?.trim() || null,
     metadata: input.metadata ?? {},
     is_enabled: Boolean(input.is_enabled),
@@ -143,7 +156,7 @@ export async function saveAccountPoolRegistry(
 ): Promise<AccountPoolRegistryRow[]> {
   const supabase = createAdminClient();
   const payload = rows
-    .filter((row) => row.pool_key.trim().length > 0)
+    .filter((row) => row.table_name.trim().length > 0)
     .map(normalizePoolRegistry);
 
   if (payload.length === 0) {

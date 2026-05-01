@@ -191,6 +191,38 @@ function isMissingTableError(error: {code?: string; message?: string} | null | u
   return error?.code === "PGRST205" || error?.message?.includes(tableName);
 }
 
+function isValidPoolTableName(tableName: string) {
+  return /^[A-Za-z0-9_-]+$/.test(tableName.trim());
+}
+
+async function loadRegisteredPoolRowCounts(
+  supabase: ReturnType<typeof createAdminClient>,
+  registryRows: AccountPoolRegistryRow[]
+) {
+  const enabledRows = registryRows.filter((row) => row.is_enabled && row.table_name?.trim());
+  const counts = await Promise.all(
+    enabledRows.map(async (row) => {
+      const tableName = row.table_name.trim();
+      if (!isValidPoolTableName(tableName)) {
+        return [tableName, 0] as const;
+      }
+
+      const {count, error} = await supabase
+        .from(tableName)
+        .select("*", {count: "exact", head: true});
+
+      if (error) {
+        console.error(`Failed to count pool table rows for ${tableName}:`, error);
+        return [tableName, 0] as const;
+      }
+
+      return [tableName, count ?? 0] as const;
+    })
+  );
+
+  return new Map<string, number>(counts);
+}
+
 async function loadStoredStatisticsDashboard(): Promise<StatisticsDashboardData> {
   const defaults = getDefaultStatisticsDashboardData();
   const supabase = createAdminClient();
@@ -282,11 +314,15 @@ async function loadLogDerivedStatisticsDashboard(): Promise<StatisticsDashboardD
     .filter((row) => row.created_at)
     .sort((a, b) => new Date(a.created_at ?? 0).getTime() - new Date(b.created_at ?? 0).getTime());
 
-  if (logs.length === 0) {
+  const registryRows = ((poolsResult.data as AccountPoolRegistryRow[] | null) ?? []).filter(
+    (row) => row.is_enabled
+  );
+  const poolRowCounts = await loadRegisteredPoolRowCounts(supabase, registryRows);
+
+  if (logs.length === 0 && registryRows.length === 0) {
     return null;
   }
 
-  const registryRows = (poolsResult.data as AccountPoolRegistryRow[] | null) ?? [];
   const defaults = getDefaultStatisticsDashboardData();
   const now = new Date();
   const currentHour = startOfHour(now);
@@ -420,34 +456,24 @@ async function loadLogDerivedStatisticsDashboard(): Promise<StatisticsDashboardD
       sort_order: index,
     }));
 
-  const registryMap = new Map(registryRows.map((row) => [row.table_name, row]));
-  const poolNames = new Set<string>([
-    ...registryRows.map((row) => row.table_name),
-    ...poolLogMap.keys(),
-  ]);
-
-  const accountPools: StatisticsAccountPoolRow[] = [...poolNames]
+  const accountPools: StatisticsAccountPoolRow[] = [...registryRows]
     .map((tableName, index) => {
-      const registry = registryMap.get(tableName);
-      const poolState = poolLogMap.get(tableName);
+      const registry = registryRows[index];
+      const normalizedTableName = registry.table_name.trim();
+      const poolState = poolLogMap.get(normalizedTableName);
       const metadata = registry?.metadata as Record<string, unknown> | null | undefined;
-
-      const metadataTotal =
-        asNumber(metadata?.total_accounts) ||
-        asNumber(metadata?.account_total) ||
-        asNumber(metadata?.total);
       const metadataActive =
         asNumber(metadata?.active_accounts) ||
         asNumber(metadata?.active_total) ||
         asNumber(metadata?.active);
 
-      const totalAccounts = metadataTotal || poolState?.allTime.size || 0;
+      const totalAccounts = poolRowCounts.get(normalizedTableName) ?? poolState?.allTime.size ?? 0;
       const activeAccounts = metadataActive || poolState?.recent.size || 0;
       const statusLabel = activeAccounts > 0 ? "Active" : totalAccounts > 0 ? "Idle" : "Empty";
 
       return {
-        id: registry?.id ?? `pool-${index}-${tableName}`,
-        pool_name: registry?.display_name?.trim() || tableName,
+        id: registry?.id ?? `pool-${index}-${normalizedTableName}`,
+        pool_name: registry?.display_name?.trim() || normalizedTableName,
         total_accounts: totalAccounts,
         active_accounts: activeAccounts,
         status_label: statusLabel,

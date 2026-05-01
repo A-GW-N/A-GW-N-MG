@@ -77,7 +77,7 @@ function createEditableProfile(profile?: GatewayProfileRow, index = 0): Editable
 
 function createEditablePool(pool?: AccountPoolRegistryRow, index = 0): EditablePool {
   return {
-    pool_key: pool?.pool_key ?? `pool-${String(index + 1).padStart(2, "0")}`,
+    pool_key: pool?.pool_key ?? "",
     table_name: pool?.table_name ?? "main-pool",
     display_name: pool?.display_name ?? `Pool ${String(index + 1).padStart(2, "0")}`,
     brand: pool?.brand ?? "other",
@@ -303,6 +303,9 @@ export function ControlCenterManager({
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.28em] text-muted-foreground">Account Pools</p>
             <h3 className="mt-2 text-xl font-semibold">账号池维护</h3>
+            <p className="mt-2 text-sm text-muted-foreground">
+              这里只需要维护显示名称和真实表名。统计页会直接扫描对应数据表的行数，行数就是账号总数。
+            </p>
           </div>
           <Button type="button" variant="outline" onClick={() => setPools((current) => [...current, createEditablePool(undefined, current.length)])} className="rounded-full">
             <Plus className="mr-2 h-4 w-4" />
@@ -313,11 +316,11 @@ export function ControlCenterManager({
           {pools.map((pool, index) => (
             <div key={`${pool.pool_key}-${index}`} className="rounded-[1.5rem] border border-border/45 bg-background/60 p-4">
               <div className="grid gap-3">
-                <input value={pool.pool_key} onChange={(event) => setPools((current) => current.map((item, itemIndex) => itemIndex === index ? {...item, pool_key: event.target.value} : item))} className="rounded-2xl border border-border/45 bg-background/70 px-4 py-3 text-sm outline-none" placeholder="pool_key" />
-                <input value={pool.display_name} onChange={(event) => setPools((current) => current.map((item, itemIndex) => itemIndex === index ? {...item, display_name: event.target.value} : item))} className="rounded-2xl border border-border/45 bg-background/70 px-4 py-3 text-sm outline-none" placeholder="display_name" />
-                <input value={pool.table_name} onChange={(event) => setPools((current) => current.map((item, itemIndex) => itemIndex === index ? {...item, table_name: event.target.value} : item))} className="rounded-2xl border border-border/45 bg-background/70 px-4 py-3 text-sm outline-none" placeholder="table_name e.g. main-pool" />
+                <input value={pool.display_name} onChange={(event) => setPools((current) => current.map((item, itemIndex) => itemIndex === index ? {...item, display_name: event.target.value} : item))} className="rounded-2xl border border-border/45 bg-background/70 px-4 py-3 text-sm outline-none" placeholder="显示名称，例如 OpenAI 主号池" />
+                <input value={pool.table_name} onChange={(event) => setPools((current) => current.map((item, itemIndex) => itemIndex === index ? {...item, table_name: event.target.value} : item))} className="rounded-2xl border border-border/45 bg-background/70 px-4 py-3 text-sm outline-none" placeholder="真实表名，例如 main-pool" />
+                <input value={pool.pool_key} onChange={(event) => setPools((current) => current.map((item, itemIndex) => itemIndex === index ? {...item, pool_key: event.target.value} : item))} className="rounded-2xl border border-border/45 bg-background/70 px-4 py-3 text-sm outline-none" placeholder="pool_key，可留空自动生成" />
                 <input value={pool.brand} onChange={(event) => setPools((current) => current.map((item, itemIndex) => itemIndex === index ? {...item, brand: event.target.value} : item))} className="rounded-2xl border border-border/45 bg-background/70 px-4 py-3 text-sm outline-none" placeholder="brand" />
-                <textarea value={pool.metadata_json} onChange={(event) => setPools((current) => current.map((item, itemIndex) => itemIndex === index ? {...item, metadata_json: event.target.value} : item))} className="min-h-24 rounded-2xl border border-border/45 bg-background/70 px-4 py-3 text-sm outline-none" placeholder="metadata JSON" />
+                <textarea value={pool.metadata_json} onChange={(event) => setPools((current) => current.map((item, itemIndex) => itemIndex === index ? {...item, metadata_json: event.target.value} : item))} className="min-h-24 rounded-2xl border border-border/45 bg-background/70 px-4 py-3 text-sm outline-none" placeholder="metadata JSON（可选，active_accounts 等高级覆盖值）" />
               </div>
               <div className="mt-3 flex items-center justify-between">
                 <label className="flex items-center gap-2 text-sm text-muted-foreground">
