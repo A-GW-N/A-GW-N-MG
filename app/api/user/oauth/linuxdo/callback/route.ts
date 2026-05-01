@@ -104,7 +104,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    const accessToken = await exchangeLinuxdoCode(code);
+    const accessToken = await exchangeLinuxdoCode(code, request);
     const rawProfile = await fetchLinuxdoProfile(accessToken);
     const profile = normalizeLinuxdoProfile(rawProfile);
     const [existingUser, registrationSettings] = await Promise.all([

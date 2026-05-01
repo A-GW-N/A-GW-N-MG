@@ -30,3 +30,8 @@ export function getAppOrigin(request: Request) {
 export function buildAppUrl(request: Request, pathname: string) {
   return new URL(pathname, `${getAppOrigin(request)}/`);
 }
+
+export function buildPublicRequestUrl(request: Request) {
+  const requestUrl = new URL(request.url);
+  return new URL(`${requestUrl.pathname}${requestUrl.search}`, `${getAppOrigin(request)}/`);
+}

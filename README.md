@@ -62,7 +62,7 @@ ADMIN_PASSWORD=change-me
 
 LINUXDO_OAUTH_CLIENT_ID=...
 LINUXDO_OAUTH_CLIENT_SECRET=...
-LINUXDO_OAUTH_CALLBACK_URL=http://localhost:3000/api/user/oauth/linuxdo/callback
+LINUXDO_OAUTH_CALLBACK_URL=
 
 GATEWAY_KEY_ENCRYPTION_SECRET=replace-with-a-long-random-secret
 GATEWAY_API_KEYS=sk-change-me

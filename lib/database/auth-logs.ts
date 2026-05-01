@@ -3,6 +3,7 @@ import "server-only";
 import {createAdminClient} from "@/lib/supabase/admin";
 import {sanitizeSensitiveText} from "@/lib/security/sanitize-sensitive-text";
 import type {AuthEventLogRow} from "@/lib/types";
+import {buildPublicRequestUrl} from "@/lib/utils/request-url";
 
 const AUTH_EVENT_LOGS_TABLE = "auth_event_logs";
 
@@ -101,15 +102,19 @@ function buildRequestContextMetadata(request?: Request | null) {
   }
 
   const requestUrl = new URL(request.url);
+  const publicRequestUrl = buildPublicRequestUrl(request);
   const cookieHeader = request.headers.get("cookie");
+  const presentCookies = listPresentCookies(cookieHeader);
 
   return {
     request_method: request.method,
-    request_path: requestUrl.pathname,
+    request_path: publicRequestUrl.pathname,
     request_query: sanitizeQueryEntries(requestUrl),
-    request_host: requestUrl.host,
-    request_protocol: requestUrl.protocol.replace(":", ""),
-    request_origin: requestUrl.origin,
+    request_host: publicRequestUrl.host,
+    request_protocol: publicRequestUrl.protocol.replace(":", ""),
+    request_origin: publicRequestUrl.origin,
+    request_internal_host: requestUrl.host,
+    request_internal_origin: requestUrl.origin,
     request_referrer: sanitizeSensitiveText(request.headers.get("referer")?.trim() ?? ""),
     request_content_type: sanitizeSensitiveText(request.headers.get("content-type")?.trim() ?? ""),
     request_accept: sanitizeSensitiveText(request.headers.get("accept")?.trim() ?? ""),
@@ -126,8 +131,8 @@ function buildRequestContextMetadata(request?: Request | null) {
     x_real_ip: request.headers.get("x-real-ip")?.trim() ?? "",
     cf_connecting_ip: request.headers.get("cf-connecting-ip")?.trim() ?? "",
     cf_ray: request.headers.get("cf-ray")?.trim() ?? "",
-    cookie_names: listPresentCookies(cookieHeader),
-    cookie_count: cookieHeader ? listPresentCookies(cookieHeader).length : 0,
+    cookie_names: presentCookies,
+    cookie_count: presentCookies.length,
   };
 }
 

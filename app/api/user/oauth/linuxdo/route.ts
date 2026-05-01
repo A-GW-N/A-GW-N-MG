@@ -27,7 +27,7 @@ export async function GET(request: Request) {
     const redirectTo = sanitizeUserRedirectPath(requestUrl.searchParams.get("redirect"));
     const state = createOAuthState();
 
-    const response = NextResponse.redirect(buildLinuxdoAuthorizationURL(state));
+    const response = NextResponse.redirect(buildLinuxdoAuthorizationURL(state, request));
     response.cookies.set(USER_OAUTH_STATE_COOKIE, state, buildCookieOptions());
     response.cookies.set(USER_OAUTH_REDIRECT_COOKIE, redirectTo, buildCookieOptions());
 
@@ -43,6 +43,7 @@ export async function GET(request: Request) {
         metadata: {
           redirect_to: redirectTo,
           state_issued: true,
+          callback_url: buildAppUrl(request, "/api/user/oauth/linuxdo/callback").toString(),
         },
       },
       {request}
