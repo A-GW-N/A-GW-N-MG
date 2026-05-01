@@ -45,6 +45,11 @@ function readMetadataJson(metadata: Record<string, unknown>, key: string) {
   return metadata[key] ?? {};
 }
 
+function readMetadataBoolean(metadata: Record<string, unknown>, key: string) {
+  const value = metadata[key];
+  return typeof value === "boolean" ? String(value) : "暂无";
+}
+
 export function AdminRequestLogsPage({logs, isProtected}: AdminRequestLogsPageProps) {
   return (
     <div className="relative min-h-screen py-4 sm:py-6">
@@ -206,6 +211,19 @@ export function AdminRequestLogsPage({logs, isProtected}: AdminRequestLogsPagePr
                 </div>
 
                 <div className="rounded-[1.3rem] border border-border/45 bg-background/60 p-4 text-sm leading-7">
+                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">Gateway Context</p>
+                  <div className="mt-3 break-all text-muted-foreground">
+                    <div>profile_key: {readMetadataString(log.metadata, "profile_key")}</div>
+                    <div>profile_display_name: {readMetadataString(log.metadata, "profile_display_name")}</div>
+                    <div>provider_slug: {readMetadataString(log.metadata, "provider_slug")}</div>
+                    <div>upstream_endpoint: {readMetadataString(log.metadata, "upstream_endpoint")}</div>
+                    <div>failure_stage: {readMetadataString(log.metadata, "failure_stage")}</div>
+                    <div>model_mapping_applied: {readMetadataBoolean(log.metadata, "model_mapping_applied")}</div>
+                    <div>selected_pool_source: {readMetadataString(log.metadata, "selected_pool_source")}</div>
+                  </div>
+                </div>
+
+                <div className="rounded-[1.3rem] border border-border/45 bg-background/60 p-4 text-sm leading-7">
                   <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">Forwarded Headers</p>
                   <div className="mt-3 break-all text-muted-foreground">
                     <div>x_forwarded_for: {readMetadataString(log.metadata, "x_forwarded_for")}</div>
@@ -216,10 +234,43 @@ export function AdminRequestLogsPage({logs, isProtected}: AdminRequestLogsPagePr
                     <div>incoming_mode: {readMetadataString(log.metadata, "incoming_mode")}</div>
                   </div>
                 </div>
+              </div>
+
+              <div className="mt-4 grid gap-4 xl:grid-cols-3">
+                <div className="rounded-[1.3rem] border border-border/45 bg-background/60 p-4 text-sm leading-7">
+                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">Upstream Response</p>
+                  <div className="mt-3 break-all text-muted-foreground">
+                    <div>response_content_type: {readMetadataString(log.metadata, "response_content_type")}</div>
+                    <div>response_content_length: {readMetadataString(log.metadata, "response_content_length")}</div>
+                    <div>response_server: {readMetadataString(log.metadata, "response_server")}</div>
+                    <div>response_request_id: {readMetadataString(log.metadata, "response_request_id")}</div>
+                    <div>response_body_size: {readMetadataNumber(log.metadata, "response_body_size")}</div>
+                    <div>active_pool_count: {readMetadataNumber(log.metadata, "active_pool_count")}</div>
+                    <div>dynamic_pool_table_count: {readMetadataNumber(log.metadata, "dynamic_pool_table_count")}</div>
+                  </div>
+                </div>
+
+                <div className="rounded-[1.3rem] border border-border/45 bg-background/60 p-4 text-sm leading-7">
+                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">Pool Resolution</p>
+                  <div className="mt-3 text-muted-foreground">
+                    <div>active_pool_tables:</div>
+                    <pre className="mt-2 overflow-x-auto whitespace-pre-wrap break-all rounded-2xl bg-black/5 p-3 font-mono text-xs dark:bg-white/[0.04]">
+                      {formatJson(readMetadataJson(log.metadata, "active_pool_tables"))}
+                    </pre>
+                    <div className="mt-3">dynamic_pool_tables:</div>
+                    <pre className="mt-2 overflow-x-auto whitespace-pre-wrap break-all rounded-2xl bg-black/5 p-3 font-mono text-xs dark:bg-white/[0.04]">
+                      {formatJson(readMetadataJson(log.metadata, "dynamic_pool_tables"))}
+                    </pre>
+                  </div>
+                </div>
 
                 <div className="rounded-[1.3rem] border border-border/45 bg-background/60 p-4 text-sm leading-7">
                   <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">Request Preview</p>
                   <div className="mt-3 text-muted-foreground">
+                    <div>normalized_body_preview:</div>
+                    <pre className="mt-2 overflow-x-auto whitespace-pre-wrap break-all rounded-2xl bg-black/5 p-3 font-mono text-xs dark:bg-white/[0.04]">
+                      {formatJson(readMetadataJson(log.metadata, "normalized_body_preview"))}
+                    </pre>
                     <div>request_query:</div>
                     <pre className="mt-2 overflow-x-auto whitespace-pre-wrap break-all rounded-2xl bg-black/5 p-3 font-mono text-xs dark:bg-white/[0.04]">
                       {formatJson(readMetadataJson(log.metadata, "request_query"))}
@@ -227,6 +278,10 @@ export function AdminRequestLogsPage({logs, isProtected}: AdminRequestLogsPagePr
                     <div className="mt-3">request_body_preview:</div>
                     <pre className="mt-2 overflow-x-auto whitespace-pre-wrap break-all rounded-2xl bg-black/5 p-3 font-mono text-xs dark:bg-white/[0.04]">
                       {formatJson(readMetadataJson(log.metadata, "request_body_preview"))}
+                    </pre>
+                    <div className="mt-3">response_body_preview:</div>
+                    <pre className="mt-2 overflow-x-auto whitespace-pre-wrap break-all rounded-2xl bg-black/5 p-3 font-mono text-xs dark:bg-white/[0.04]">
+                      {formatJson(readMetadataJson(log.metadata, "response_body_preview"))}
                     </pre>
                   </div>
                 </div>
