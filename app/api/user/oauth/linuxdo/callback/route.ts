@@ -72,6 +72,9 @@ export async function GET(request: Request) {
         message: oauthError,
         metadata: {
           phase: "callback",
+          code_present: Boolean(code),
+          state_present: Boolean(state),
+          expected_state_present: Boolean(expectedState),
         },
       },
       {request}
@@ -89,6 +92,11 @@ export async function GET(request: Request) {
         provider: "linuxdo",
         target_path: redirectTo,
         message: "OAuth 回调校验失败",
+        metadata: {
+          code_present: Boolean(code),
+          state_present: Boolean(state),
+          expected_state_present: Boolean(expectedState),
+        },
       },
       {request}
     );
@@ -121,6 +129,10 @@ export async function GET(request: Request) {
             actor_display_name: profile.displayName,
             target_path: redirectTo,
             message: "未开启注册",
+            metadata: {
+              registration_mode: registrationSettings.registration_mode,
+              oauth_subject: profile.subject,
+            },
           },
           {request}
         );
@@ -139,6 +151,11 @@ export async function GET(request: Request) {
             actor_display_name: profile.displayName,
             target_path: "/user/invite",
             message: "需要邀请码继续注册",
+            metadata: {
+              registration_mode: registrationSettings.registration_mode,
+              redirect_to: redirectTo,
+              oauth_subject: profile.subject,
+            },
           },
           {request}
         );
@@ -207,6 +224,9 @@ export async function GET(request: Request) {
         message: "Linux.do 登录成功",
         metadata: {
           redirect_to: redirectTo,
+          oauth_subject: profile.subject,
+          oauth_username: profile.username,
+          user_created: !existingUser,
         },
       },
       {request}
@@ -224,6 +244,10 @@ export async function GET(request: Request) {
         provider: "linuxdo",
         target_path: redirectTo,
         message,
+        metadata: {
+          code_present: Boolean(code),
+          state_present: Boolean(state),
+        },
       },
       {request}
     );

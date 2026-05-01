@@ -31,6 +31,20 @@ function formatJson(value: unknown) {
   return JSON.stringify(value ?? {}, null, 2);
 }
 
+function readMetadataString(metadata: Record<string, unknown>, key: string) {
+  const value = metadata[key];
+  return typeof value === "string" && value.trim() ? value : "暂无";
+}
+
+function readMetadataNumber(metadata: Record<string, unknown>, key: string) {
+  const value = metadata[key];
+  return typeof value === "number" ? String(value) : "暂无";
+}
+
+function readMetadataJson(metadata: Record<string, unknown>, key: string) {
+  return metadata[key] ?? {};
+}
+
 export function AdminRequestLogsPage({logs, isProtected}: AdminRequestLogsPageProps) {
   return (
     <div className="relative min-h-screen py-4 sm:py-6">
@@ -174,6 +188,47 @@ export function AdminRequestLogsPage({logs, isProtected}: AdminRequestLogsPagePr
                   <pre className="mt-3 overflow-x-auto whitespace-pre-wrap break-all rounded-2xl bg-black/5 p-3 font-mono text-xs text-muted-foreground dark:bg-white/[0.04]">
                     {formatJson(log.metadata)}
                   </pre>
+                </div>
+              </div>
+
+              <div className="mt-4 grid gap-4 xl:grid-cols-3">
+                <div className="rounded-[1.3rem] border border-border/45 bg-background/60 p-4 text-sm leading-7">
+                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">HTTP Context</p>
+                  <div className="mt-3 break-all text-muted-foreground">
+                    <div>http_method: {readMetadataString(log.metadata, "http_method")}</div>
+                    <div>request_path: {readMetadataString(log.metadata, "request_path")}</div>
+                    <div>request_host: {readMetadataString(log.metadata, "request_host")}</div>
+                    <div>request_remote_addr: {readMetadataString(log.metadata, "request_remote_addr")}</div>
+                    <div>content_type: {readMetadataString(log.metadata, "content_type")}</div>
+                    <div>accept: {readMetadataString(log.metadata, "accept")}</div>
+                    <div>content_length: {readMetadataNumber(log.metadata, "content_length")}</div>
+                  </div>
+                </div>
+
+                <div className="rounded-[1.3rem] border border-border/45 bg-background/60 p-4 text-sm leading-7">
+                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">Forwarded Headers</p>
+                  <div className="mt-3 break-all text-muted-foreground">
+                    <div>x_forwarded_for: {readMetadataString(log.metadata, "x_forwarded_for")}</div>
+                    <div>x_forwarded_host: {readMetadataString(log.metadata, "x_forwarded_host")}</div>
+                    <div>x_forwarded_proto: {readMetadataString(log.metadata, "x_forwarded_proto")}</div>
+                    <div>x_real_ip: {readMetadataString(log.metadata, "x_real_ip")}</div>
+                    <div>cf_connecting_ip: {readMetadataString(log.metadata, "cf_connecting_ip")}</div>
+                    <div>incoming_mode: {readMetadataString(log.metadata, "incoming_mode")}</div>
+                  </div>
+                </div>
+
+                <div className="rounded-[1.3rem] border border-border/45 bg-background/60 p-4 text-sm leading-7">
+                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">Request Preview</p>
+                  <div className="mt-3 text-muted-foreground">
+                    <div>request_query:</div>
+                    <pre className="mt-2 overflow-x-auto whitespace-pre-wrap break-all rounded-2xl bg-black/5 p-3 font-mono text-xs dark:bg-white/[0.04]">
+                      {formatJson(readMetadataJson(log.metadata, "request_query"))}
+                    </pre>
+                    <div className="mt-3">request_body_preview:</div>
+                    <pre className="mt-2 overflow-x-auto whitespace-pre-wrap break-all rounded-2xl bg-black/5 p-3 font-mono text-xs dark:bg-white/[0.04]">
+                      {formatJson(readMetadataJson(log.metadata, "request_body_preview"))}
+                    </pre>
+                  </div>
                 </div>
               </div>
             </article>

@@ -15,7 +15,7 @@ export async function POST() {
   );
 }
 
-export async function DELETE() {
+export async function DELETE(request: Request) {
   const cookieStore = await cookies();
   const token = cookieStore.get(USER_SESSION_COOKIE)?.value ?? "";
   const user = await getAuthenticatedUser();
@@ -38,7 +38,13 @@ export async function DELETE() {
       actor_role: user?.role ?? null,
       target_path: "/user",
       message: "用户退出登录",
+      metadata: {
+        had_session_token: Boolean(token),
+        session_cookie_cleared: true,
+      },
     }
+    ,
+    {request}
   );
 
   return NextResponse.json({message: "已退出登录"});

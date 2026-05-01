@@ -45,6 +45,12 @@ export async function POST(request: Request) {
         provider: "linuxdo",
         target_path: "/user/invite",
         message: "邀请码会话已失效，请重新登录",
+        metadata: {
+          redirect_to: redirectTo,
+          has_pending_profile_cookie: Boolean(
+            cookieStore.get(USER_OAUTH_PENDING_PROFILE_COOKIE)?.value
+          ),
+        },
       },
       {request}
     );
@@ -71,6 +77,9 @@ export async function POST(request: Request) {
           provider: "linuxdo",
           target_path: "/user/invite",
           message: "请输入邀请码",
+          metadata: {
+            redirect_to: redirectTo,
+          },
         },
         {request}
       );
@@ -88,6 +97,10 @@ export async function POST(request: Request) {
           provider: "linuxdo",
           target_path: "/user/invite",
           message: "邀请码无效或已失效",
+          metadata: {
+            redirect_to: redirectTo,
+            invite_code_preview: inviteCode.slice(0, 3),
+          },
         },
         {request}
       );
@@ -146,6 +159,13 @@ export async function POST(request: Request) {
         provider: "linuxdo",
         target_path: redirectTo,
         message: "邀请码注册并登录成功",
+        metadata: {
+          redirect_to: redirectTo,
+          oauth_subject: profile.subject,
+          oauth_username: profile.username,
+          invite_code_preview: inviteCode.slice(0, 3),
+          reused_existing_user: Boolean(existingUser),
+        },
       },
       {request}
     );
@@ -162,6 +182,9 @@ export async function POST(request: Request) {
         provider: "linuxdo",
         target_path: "/user/invite",
         message,
+        metadata: {
+          redirect_to: redirectTo,
+        },
       },
       {request}
     );

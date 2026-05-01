@@ -50,6 +50,87 @@ function sanitizeMetadataValue(value: unknown): unknown {
   return value;
 }
 
+function sanitizeQueryValue(key: string, value: string) {
+  const loweredKey = key.trim().toLowerCase();
+  if (
+    loweredKey.includes("key") ||
+    loweredKey.includes("token") ||
+    loweredKey.includes("secret") ||
+    loweredKey.includes("password") ||
+    loweredKey.includes("code")
+  ) {
+    return "[redacted]";
+  }
+
+  return sanitizeSensitiveText(value.trim());
+}
+
+function sanitizeQueryEntries(requestUrl: URL) {
+  const entries = Array.from(requestUrl.searchParams.entries());
+  if (entries.length === 0) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    entries.map(([key, value]) => [key, sanitizeQueryValue(key, value)])
+  );
+}
+
+function listPresentCookies(rawCookieHeader: string | null) {
+  if (!rawCookieHeader) {
+    return [];
+  }
+
+  return rawCookieHeader
+    .split(";")
+    .map((part) => part.split("=")[0]?.trim())
+    .filter(Boolean)
+    .slice(0, 20);
+}
+
+function mergeMetadata(
+  base: Record<string, unknown>,
+  extra: Record<string, unknown>
+) {
+  return {...base, ...extra};
+}
+
+function buildRequestContextMetadata(request?: Request | null) {
+  if (!request) {
+    return {};
+  }
+
+  const requestUrl = new URL(request.url);
+  const cookieHeader = request.headers.get("cookie");
+
+  return {
+    request_method: request.method,
+    request_path: requestUrl.pathname,
+    request_query: sanitizeQueryEntries(requestUrl),
+    request_host: requestUrl.host,
+    request_protocol: requestUrl.protocol.replace(":", ""),
+    request_origin: requestUrl.origin,
+    request_referrer: sanitizeSensitiveText(request.headers.get("referer")?.trim() ?? ""),
+    request_content_type: sanitizeSensitiveText(request.headers.get("content-type")?.trim() ?? ""),
+    request_accept: sanitizeSensitiveText(request.headers.get("accept")?.trim() ?? ""),
+    request_accept_language: sanitizeSensitiveText(
+      request.headers.get("accept-language")?.trim() ?? ""
+    ),
+    request_sec_fetch_site: request.headers.get("sec-fetch-site")?.trim() ?? "",
+    request_sec_fetch_mode: request.headers.get("sec-fetch-mode")?.trim() ?? "",
+    request_sec_fetch_dest: request.headers.get("sec-fetch-dest")?.trim() ?? "",
+    request_origin_header: sanitizeSensitiveText(request.headers.get("origin")?.trim() ?? ""),
+    x_forwarded_for: request.headers.get("x-forwarded-for")?.trim() ?? "",
+    x_forwarded_host: request.headers.get("x-forwarded-host")?.trim() ?? "",
+    x_forwarded_proto: request.headers.get("x-forwarded-proto")?.trim() ?? "",
+    x_real_ip: request.headers.get("x-real-ip")?.trim() ?? "",
+    cf_connecting_ip: request.headers.get("cf-connecting-ip")?.trim() ?? "",
+    cf_ray: request.headers.get("cf-ray")?.trim() ?? "",
+    cookie_names: listPresentCookies(cookieHeader),
+    cookie_count: cookieHeader ? listPresentCookies(cookieHeader).length : 0,
+  };
+}
+
 function extractClientInfo(request?: Request | null) {
   if (!request) {
     return {
@@ -75,6 +156,11 @@ export async function recordAuthEvent(
   try {
     const supabase = createAdminClient();
     const clientInfo = extractClientInfo(options?.request);
+    const requestMetadata = buildRequestContextMetadata(options?.request);
+    const metadata = mergeMetadata(
+      requestMetadata,
+      ((sanitizeMetadataValue(input.metadata ?? {}) as Record<string, unknown>) ?? {})
+    );
 
     const payload = {
       category: input.category,
@@ -90,7 +176,7 @@ export async function recordAuthEvent(
       ip_address: normalizeString(input.ip_address) ?? clientInfo.ipAddress,
       user_agent: normalizeString(input.user_agent) ?? normalizeString(clientInfo.userAgent),
       message: normalizeString(input.message),
-      metadata: (sanitizeMetadataValue(input.metadata ?? {}) as Record<string, unknown>) ?? {},
+      metadata,
     };
 
     const {error} = await supabase.from(AUTH_EVENT_LOGS_TABLE).insert(payload);

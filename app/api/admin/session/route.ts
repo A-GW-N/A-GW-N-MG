@@ -51,6 +51,10 @@ export async function GET(request: Request) {
         provider: user.auth_source ?? "user-session",
         target_path: redirectTo,
         message: "管理员经用户会话进入管理界面",
+        metadata: {
+          redirect_to: redirectTo,
+          admin_password_configured: isAdminPasswordConfigured(),
+        },
       },
       {request}
     );
@@ -66,6 +70,10 @@ export async function GET(request: Request) {
       auth_scope: "admin",
       target_path: redirectTo,
       message: "当前账号无管理员权限",
+      metadata: {
+        redirect_to: redirectTo,
+        has_user_session: Boolean(user),
+      },
     },
     {request}
   );
@@ -74,6 +82,9 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const body = (await request.json().catch(() => null)) as {password?: string} | null;
+  const password = body?.password?.trim() ?? "";
+
   if (!isAdminPasswordConfigured()) {
     await recordAuthEvent(
       {
@@ -83,6 +94,9 @@ export async function POST(request: Request) {
         auth_scope: "admin",
         target_path: "/admin",
         message: "未配置管理密码，请先使用管理员用户登录后再进入管理页面",
+        metadata: {
+          password_present: Boolean(body?.password?.trim()),
+        },
       },
       {request}
     );
@@ -91,9 +105,6 @@ export async function POST(request: Request) {
       {status: 403}
     );
   }
-
-  const body = (await request.json().catch(() => null)) as {password?: string} | null;
-  const password = body?.password?.trim() ?? "";
 
   if (!verifyAdminPassword(password)) {
     await recordAuthEvent(
@@ -104,6 +115,9 @@ export async function POST(request: Request) {
         auth_scope: "admin",
         target_path: "/admin",
         message: "密码错误",
+        metadata: {
+          password_present: Boolean(password),
+        },
       },
       {request}
     );
@@ -125,6 +139,9 @@ export async function POST(request: Request) {
       auth_scope: "admin",
       target_path: "/admin",
       message: "管理员密码登录成功",
+      metadata: {
+        password_present: Boolean(password),
+      },
     },
     {request}
   );
@@ -147,6 +164,9 @@ export async function DELETE(request: Request) {
       auth_scope: "admin",
       target_path: "/admin",
       message: "管理员退出管理界面",
+      metadata: {
+        session_cookie_cleared: true,
+      },
     },
     {request}
   );
