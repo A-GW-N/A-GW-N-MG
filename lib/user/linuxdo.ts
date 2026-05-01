@@ -77,6 +77,40 @@ function toLinuxdoFetchError(error: unknown, phase: "token" | "profile") {
   return new Error(fallbackMessage);
 }
 
+function buildLinuxdoResponseError(
+  phase: "token" | "profile",
+  response: Response,
+  detail: "non_json" | "invalid_json"
+) {
+  const contentType = response.headers.get("content-type")?.trim() || "unknown";
+  const label = phase === "token" ? "token" : "用户资料";
+
+  if (detail === "non_json") {
+    return new Error(
+      `Linux.do ${label}服务返回了非 JSON 响应（status=${response.status}, content-type=${contentType}）`
+    );
+  }
+
+  return new Error(
+    `Linux.do ${label}服务返回了无法解析的 JSON（status=${response.status}, content-type=${contentType}）`
+  );
+}
+
+async function parseLinuxdoJsonResponse<T>(response: Response, phase: "token" | "profile") {
+  const contentType = response.headers.get("content-type")?.trim().toLowerCase() ?? "";
+  const rawText = await response.text();
+
+  if (!contentType.includes("application/json")) {
+    throw buildLinuxdoResponseError(phase, response, "non_json");
+  }
+
+  try {
+    return JSON.parse(rawText) as T;
+  } catch {
+    throw buildLinuxdoResponseError(phase, response, "invalid_json");
+  }
+}
+
 function isLoopbackHostname(hostname: string) {
   const normalized = hostname.trim().toLowerCase();
   return (
@@ -202,12 +236,12 @@ export async function exchangeLinuxdoCode(code: string, request?: Request) {
     throw toLinuxdoFetchError(error, "token");
   }
 
-  const result = (await response.json()) as {
+  const result = await parseLinuxdoJsonResponse<{
     access_token?: string;
     token_type?: string;
     error?: string;
     error_description?: string;
-  };
+  }>(response, "token");
 
   if (!response.ok || !result.access_token) {
     throw new Error(result.error_description || result.error || "Linux.do token 获取失败");
@@ -231,7 +265,7 @@ export async function fetchLinuxdoProfile(accessToken: string) {
     throw toLinuxdoFetchError(error, "profile");
   }
 
-  const result = (await response.json()) as Record<string, unknown>;
+  const result = await parseLinuxdoJsonResponse<Record<string, unknown>>(response, "profile");
   if (!response.ok) {
     throw new Error("Linux.do 用户资料获取失败");
   }
