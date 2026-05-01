@@ -247,6 +247,7 @@ export async function GET(request: Request) {
         metadata: {
           code_present: Boolean(code),
           state_present: Boolean(state),
+          internal_error: error instanceof Error ? error.message : String(error),
         },
       },
       {request}

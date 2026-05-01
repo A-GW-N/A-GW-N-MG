@@ -217,10 +217,10 @@ export async function exchangeLinuxdoCode(code: string, request?: Request) {
 }
 
 export async function fetchLinuxdoProfile(accessToken: string) {
-  const config = getLinuxdoOAuthConfig();
+  const {profileUrl} = resolveLinuxdoEndpoints();
   let response: Response;
   try {
-    response = await fetch(config.profileUrl, {
+    response = await fetch(profileUrl, {
       headers: {
         Authorization: `Bearer ${accessToken}`,
         Accept: "application/json",
