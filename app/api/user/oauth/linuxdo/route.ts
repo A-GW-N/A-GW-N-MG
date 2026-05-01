@@ -8,6 +8,7 @@ import {
   sanitizeUserRedirectPath,
   toPublicUserAuthErrorMessage,
 } from "@/lib/user/linuxdo";
+import {buildAppUrl} from "@/lib/utils/request-url";
 
 function buildCookieOptions() {
   return {
@@ -32,6 +33,6 @@ export async function GET(request: Request) {
     return response;
   } catch (error) {
     const message = toPublicUserAuthErrorMessage(error, "Linux.do 登录初始化失败");
-    return NextResponse.redirect(new URL(`/user?error=${encodeURIComponent(message)}`, request.url));
+    return NextResponse.redirect(buildAppUrl(request, `/user?error=${encodeURIComponent(message)}`));
   }
 }

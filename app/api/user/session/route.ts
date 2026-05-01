@@ -4,7 +4,9 @@ import {cookies} from "next/headers";
 import {
   USER_SESSION_COOKIE,
   clearUserSession,
+  getAuthenticatedUser,
 } from "@/lib/user/auth";
+import {recordAuthEvent} from "@/lib/database/auth-logs";
 
 export async function POST() {
   return NextResponse.json(
@@ -16,11 +18,28 @@ export async function POST() {
 export async function DELETE() {
   const cookieStore = await cookies();
   const token = cookieStore.get(USER_SESSION_COOKIE)?.value ?? "";
+  const user = await getAuthenticatedUser();
 
   if (token) {
     await clearUserSession(token);
   }
 
   cookieStore.delete(USER_SESSION_COOKIE);
+
+  await recordAuthEvent(
+    {
+      category: "logout",
+      event_type: "user_logout",
+      success: true,
+      auth_scope: "user",
+      actor_user_id: user?.id ?? null,
+      actor_username: user?.username ?? null,
+      actor_display_name: user?.display_name ?? null,
+      actor_role: user?.role ?? null,
+      target_path: "/user",
+      message: "用户退出登录",
+    }
+  );
+
   return NextResponse.json({message: "已退出登录"});
 }

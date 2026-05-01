@@ -6,7 +6,6 @@
  * - 获取所有可用的分组列表
  */
 import {loadProviderConfigsFromDB} from "../database/config-loader";
-import {getGroupInfo} from "../database/group-info";
 import {getAvailabilityStats} from "../database/availability";
 import {getPollingIntervalLabel, getPollingIntervalMs} from "./polling-config";
 import {ensureOfficialStatusPoller} from "./official-status-poller";
@@ -159,13 +158,8 @@ export async function loadGroupDashboardData(
     const availabilityStats = await getAvailabilityStats(configIds);
 
     // 获取分组信息（仅对有名分组）
-    let websiteUrl: string | undefined | null;
-    let tags = "";
-    if (!isTargetUngrouped) {
-      const groupInfo = await getGroupInfo(targetGroupName);
-      websiteUrl = groupInfo?.website_url;
-      tags = groupInfo?.tags ?? "";
-    }
+    const websiteUrl: string | undefined | null = undefined;
+    const tags = "";
 
     const data: GroupDashboardData = {
       groupName: targetGroupName,

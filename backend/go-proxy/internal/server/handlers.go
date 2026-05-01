@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 	"time"
@@ -119,6 +120,8 @@ func (s *Server) proxyRequest(w http.ResponseWriter, r *http.Request, incomingMo
 		return
 	}
 
+	requestMetadata := buildRequestMetadata(r, incomingMode, body)
+
 	normalizedBody, externalModel, mappedModel, brand, toolCount, imageCount, err := normalizeRequestBody(body, profile, incomingMode)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
@@ -149,12 +152,12 @@ func (s *Server) proxyRequest(w http.ResponseWriter, r *http.Request, incomingMo
 			ToolCount:           toolCount,
 			ImageCount:          imageCount,
 			ErrorMessage:        errorMessage(responseErr),
-			Metadata: map[string]any{
+			Metadata: mergeMetadata(requestMetadata, map[string]any{
 				"profile_key":   profile.ProfileKey,
 				"provider_slug": profile.ProviderSlug,
 				"incoming_mode": incomingMode,
 				"api_key_name":  forwardedKeyName,
-			},
+			}),
 		}); err != nil {
 			log.Printf("failed to persist request log %s: %v", requestID, err)
 		}
@@ -212,13 +215,13 @@ func (s *Server) proxyRequest(w http.ResponseWriter, r *http.Request, incomingMo
 		ToolCount:           toolCount,
 		ImageCount:          imageCount,
 		ErrorMessage:        errorMessage(logErr),
-		Metadata: map[string]any{
+		Metadata: mergeMetadata(requestMetadata, map[string]any{
 			"profile_key":        profile.ProfileKey,
 			"provider_slug":      profile.ProviderSlug,
 			"dynamic_pool_table": selectedPoolName,
 			"incoming_mode":      incomingMode,
 			"api_key_name":       forwardedKeyName,
-		},
+		}),
 	}); err != nil {
 		log.Printf("failed to persist request log %s: %v", requestID, err)
 	}
@@ -739,6 +742,219 @@ func errorMessage(err error) string {
 		return ""
 	}
 	return err.Error()
+}
+
+func buildRequestMetadata(r *http.Request, incomingMode string, body []byte) map[string]any {
+	return map[string]any{
+		"http_method":        r.Method,
+		"request_path":       r.URL.Path,
+		"request_query":      sanitizeQuery(r.URL.Query()),
+		"request_host":       r.Host,
+		"request_remote_addr": r.RemoteAddr,
+		"incoming_mode":      incomingMode,
+		"user_agent":         truncateString(r.UserAgent(), 512),
+		"content_length":     len(body),
+		"content_type":       truncateString(r.Header.Get("Content-Type"), 256),
+		"accept":             truncateString(r.Header.Get("Accept"), 256),
+		"x_forwarded_for":    truncateString(r.Header.Get("X-Forwarded-For"), 512),
+		"x_forwarded_host":   truncateString(r.Header.Get("X-Forwarded-Host"), 256),
+		"x_forwarded_proto":  truncateString(r.Header.Get("X-Forwarded-Proto"), 64),
+		"cf_connecting_ip":   truncateString(r.Header.Get("CF-Connecting-IP"), 128),
+		"x_real_ip":          truncateString(r.Header.Get("X-Real-IP"), 128),
+		"request_body_preview": buildBodyPreview(body),
+	}
+}
+
+func sanitizeQuery(values url.Values) map[string]any {
+	if len(values) == 0 {
+		return map[string]any{}
+	}
+
+	result := make(map[string]any, len(values))
+	for key, items := range values {
+		lowerKey := strings.ToLower(strings.TrimSpace(key))
+		if strings.Contains(lowerKey, "key") ||
+			strings.Contains(lowerKey, "token") ||
+			strings.Contains(lowerKey, "secret") ||
+			strings.Contains(lowerKey, "password") {
+			result[key] = "[redacted]"
+			continue
+		}
+
+		if len(items) == 1 {
+			result[key] = truncateString(items[0], 256)
+			continue
+		}
+
+		sanitized := make([]string, 0, len(items))
+		for _, item := range items {
+			sanitized = append(sanitized, truncateString(item, 256))
+		}
+		result[key] = sanitized
+	}
+
+	return result
+}
+
+func buildBodyPreview(body []byte) any {
+	if len(body) == 0 {
+		return map[string]any{}
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(body, &payload); err == nil {
+		return sanitizePayload(payload)
+	}
+
+	return truncateString(string(body), 2000)
+}
+
+func sanitizePayload(payload map[string]any) map[string]any {
+	result := make(map[string]any, len(payload))
+	for key, value := range payload {
+		lowerKey := strings.ToLower(strings.TrimSpace(key))
+		switch {
+		case lowerKey == "messages":
+			result[key] = summarizeMessages(value)
+		case lowerKey == "input":
+			result[key] = summarizeInput(value)
+		case strings.Contains(lowerKey, "key"),
+			strings.Contains(lowerKey, "token"),
+			strings.Contains(lowerKey, "secret"),
+			strings.Contains(lowerKey, "password"),
+			lowerKey == "authorization":
+			result[key] = "[redacted]"
+		default:
+			result[key] = sanitizeValue(value)
+		}
+	}
+
+	return result
+}
+
+func sanitizeValue(value any) any {
+	switch typed := value.(type) {
+	case string:
+		return truncateString(typed, 600)
+	case []any:
+		items := make([]any, 0, len(typed))
+		for index, item := range typed {
+			if index >= 10 {
+				items = append(items, "[truncated]")
+				break
+			}
+			items = append(items, sanitizeValue(item))
+		}
+		return items
+	case map[string]any:
+		return sanitizePayload(typed)
+	default:
+		return value
+	}
+}
+
+func summarizeMessages(value any) any {
+	items, ok := value.([]any)
+	if !ok {
+		return sanitizeValue(value)
+	}
+
+	summary := make([]map[string]any, 0, len(items))
+	for index, item := range items {
+		if index >= 8 {
+			summary = append(summary, map[string]any{"truncated": true})
+			break
+		}
+
+		message, ok := item.(map[string]any)
+		if !ok {
+			summary = append(summary, map[string]any{"value": sanitizeValue(item)})
+			continue
+		}
+
+		entry := map[string]any{
+			"role": message["role"],
+		}
+		if content, exists := message["content"]; exists {
+			entry["content_preview"] = summarizeContent(content)
+		}
+		summary = append(summary, entry)
+	}
+
+	return summary
+}
+
+func summarizeInput(value any) any {
+	items, ok := value.([]any)
+	if !ok {
+		return sanitizeValue(value)
+	}
+
+	summary := make([]any, 0, len(items))
+	for index, item := range items {
+		if index >= 8 {
+			summary = append(summary, map[string]any{"truncated": true})
+			break
+		}
+		summary = append(summary, summarizeContent(item))
+	}
+	return summary
+}
+
+func summarizeContent(value any) any {
+	switch typed := value.(type) {
+	case string:
+		return truncateString(typed, 400)
+	case []any:
+		result := make([]any, 0, len(typed))
+		for index, item := range typed {
+			if index >= 8 {
+				result = append(result, map[string]any{"truncated": true})
+				break
+			}
+
+			itemMap, ok := item.(map[string]any)
+			if !ok {
+				result = append(result, sanitizeValue(item))
+				continue
+			}
+
+			entry := map[string]any{
+				"type": itemMap["type"],
+			}
+			if text, ok := itemMap["text"].(string); ok {
+				entry["text_preview"] = truncateString(text, 300)
+			}
+			if imageURL, ok := itemMap["image_url"]; ok {
+				entry["image_url"] = sanitizeValue(imageURL)
+			}
+			result = append(result, entry)
+		}
+		return result
+	case map[string]any:
+		return sanitizePayload(typed)
+	default:
+		return sanitizeValue(value)
+	}
+}
+
+func truncateString(value string, limit int) string {
+	value = strings.TrimSpace(value)
+	if limit <= 0 || len(value) <= limit {
+		return value
+	}
+	return value[:limit] + "...[truncated]"
+}
+
+func mergeMetadata(base map[string]any, extra map[string]any) map[string]any {
+	result := make(map[string]any, len(base)+len(extra))
+	for key, value := range base {
+		result[key] = value
+	}
+	for key, value := range extra {
+		result[key] = value
+	}
+	return result
 }
 
 func buildRequestID() string {

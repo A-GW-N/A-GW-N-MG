@@ -103,13 +103,12 @@ export function HomePage({blocks, infoPanel}: HomePageProps) {
                 </div>
                 <div className="space-y-3">
                   <h1 className="text-4xl font-black leading-none tracking-[-0.05em] sm:text-5xl md:text-6xl">
-                    A-GW-N
+                    {infoPanel.hero_title?.trim() || "A-GW-N"}
                     <br />
-                    <span className="text-foreground/42 dark:text-white/42">GATE ARRAY</span>
+                    <span className="text-foreground/42 dark:text-white/42">
+                      {infoPanel.hero_subtitle?.trim() || "GATE ARRAY"}
+                    </span>
                   </h1>
-                  <p className="max-w-[40rem] text-sm leading-7 text-muted-foreground sm:text-base dark:text-white/50">
-                    左侧保留所有入口方格，右侧作为独立信息版展示说明、更新与公告内容。
-                  </p>
                 </div>
               </div>
             </div>

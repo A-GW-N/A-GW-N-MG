@@ -10,6 +10,8 @@ let hasLoggedMissingHomepageContentTable = false;
 export interface HomepageContentInput {
   content_key?: string;
   title: string;
+  hero_title?: string;
+  hero_subtitle?: string;
   markdown: string;
 }
 
@@ -17,6 +19,8 @@ export function getDefaultHomepageContent(): HomepageContentRow {
   return {
     content_key: HOMEPAGE_CONTENT_KEY,
     title: "Information",
+    hero_title: "AI SERVICES",
+    hero_subtitle: "INTELLIGENCE MONITOR",
     markdown: [
       "## A-GW-N",
       "",
@@ -29,6 +33,8 @@ function normalizeHomepageContent(input: HomepageContentInput): HomepageContentI
   return {
     content_key: input.content_key?.trim() || HOMEPAGE_CONTENT_KEY,
     title: input.title.trim() || "Information",
+    hero_title: input.hero_title?.trim() || "AI SERVICES",
+    hero_subtitle: input.hero_subtitle?.trim() || "INTELLIGENCE MONITOR",
     markdown: input.markdown.trim(),
   };
 }
@@ -41,7 +47,7 @@ export async function loadHomepageContent(): Promise<HomepageContentRow> {
   const supabase = createAdminClient();
   const {data, error} = await supabase
     .from(HOMEPAGE_CONTENT_TABLE)
-    .select("*")
+    .select("content_key, title, hero_title, hero_subtitle, markdown, created_at, updated_at")
     .eq("content_key", HOMEPAGE_CONTENT_KEY)
     .maybeSingle();
 

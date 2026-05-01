@@ -8,6 +8,8 @@ import {
   isAdminPasswordConfigured,
   verifyAdminPassword,
 } from "@/lib/admin/auth";
+import {recordAuthEvent} from "@/lib/database/auth-logs";
+import {buildAppUrl} from "@/lib/utils/request-url";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -26,7 +28,7 @@ export async function GET(request: Request) {
   const user = await getAuthenticatedUser();
 
   if (user?.is_active && user.role?.trim().toLowerCase() === "admin") {
-    const response = NextResponse.redirect(new URL(redirectTo, request.url));
+    const response = NextResponse.redirect(buildAppUrl(request, redirectTo));
 
     if (isAdminPasswordConfigured()) {
       response.cookies.set(
@@ -36,14 +38,54 @@ export async function GET(request: Request) {
       );
     }
 
+    await recordAuthEvent(
+      {
+        category: "login",
+        event_type: "admin_oauth_entry",
+        success: true,
+        auth_scope: "admin",
+        actor_user_id: user.id,
+        actor_username: user.username,
+        actor_display_name: user.display_name,
+        actor_role: user.role,
+        provider: user.auth_source ?? "user-session",
+        target_path: redirectTo,
+        message: "管理员经用户会话进入管理界面",
+      },
+      {request}
+    );
+
     return response;
   }
 
-  return NextResponse.redirect(new URL("/user?error=当前账号无管理员权限", request.url));
+  await recordAuthEvent(
+    {
+      category: "access",
+      event_type: "admin_access_denied",
+      success: false,
+      auth_scope: "admin",
+      target_path: redirectTo,
+      message: "当前账号无管理员权限",
+    },
+    {request}
+  );
+
+  return NextResponse.redirect(buildAppUrl(request, "/user?error=当前账号无管理员权限"));
 }
 
 export async function POST(request: Request) {
   if (!isAdminPasswordConfigured()) {
+    await recordAuthEvent(
+      {
+        category: "access",
+        event_type: "admin_password_not_configured",
+        success: false,
+        auth_scope: "admin",
+        target_path: "/admin",
+        message: "未配置管理密码，请先使用管理员用户登录后再进入管理页面",
+      },
+      {request}
+    );
     return NextResponse.json(
       {message: "未配置管理密码，请先使用管理员用户登录后再进入管理页面"},
       {status: 403}
@@ -54,6 +96,17 @@ export async function POST(request: Request) {
   const password = body?.password?.trim() ?? "";
 
   if (!verifyAdminPassword(password)) {
+    await recordAuthEvent(
+      {
+        category: "login",
+        event_type: "admin_password_login_failed",
+        success: false,
+        auth_scope: "admin",
+        target_path: "/admin",
+        message: "密码错误",
+      },
+      {request}
+    );
     return NextResponse.json({message: "密码错误"}, {status: 401});
   }
 
@@ -64,14 +117,39 @@ export async function POST(request: Request) {
     getAdminSessionCookieOptions()
   );
 
+  await recordAuthEvent(
+    {
+      category: "login",
+      event_type: "admin_password_login",
+      success: true,
+      auth_scope: "admin",
+      target_path: "/admin",
+      message: "管理员密码登录成功",
+    },
+    {request}
+  );
+
   return response;
 }
 
-export async function DELETE() {
+export async function DELETE(request: Request) {
   const response = NextResponse.json({message: "已退出管理界面"});
   response.cookies.set(ADMIN_SESSION_COOKIE, "", {
     ...getAdminSessionCookieOptions(),
     maxAge: 0,
   });
+
+  await recordAuthEvent(
+    {
+      category: "logout",
+      event_type: "admin_logout",
+      success: true,
+      auth_scope: "admin",
+      target_path: "/admin",
+      message: "管理员退出管理界面",
+    },
+    {request}
+  );
+
   return response;
 }

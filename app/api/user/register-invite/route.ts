@@ -19,9 +19,11 @@ import {
   createUserSession,
   getUserSessionCookieOptions,
 } from "@/lib/user/auth";
+import {recordAuthEvent} from "@/lib/database/auth-logs";
+import {buildAppUrl} from "@/lib/utils/request-url";
 
 function redirectWithError(request: Request, message: string) {
-  const url = new URL("/user/invite", request.url);
+  const url = buildAppUrl(request, "/user/invite");
   url.searchParams.set("error", message);
   return NextResponse.redirect(url);
 }
@@ -34,8 +36,20 @@ export async function POST(request: Request) {
   );
 
   if (!pendingToken) {
+    await recordAuthEvent(
+      {
+        category: "error",
+        event_type: "invite_registration_session_missing",
+        success: false,
+        auth_scope: "user",
+        provider: "linuxdo",
+        target_path: "/user/invite",
+        message: "邀请码会话已失效，请重新登录",
+      },
+      {request}
+    );
     const response = NextResponse.redirect(
-      new URL("/user?error=邀请码会话已失效，请重新登录", request.url)
+      buildAppUrl(request, "/user?error=邀请码会话已失效，请重新登录")
     );
     response.cookies.delete(USER_OAUTH_PENDING_TOKEN_COOKIE);
     response.cookies.delete(USER_OAUTH_PENDING_PROFILE_COOKIE);
@@ -48,11 +62,35 @@ export async function POST(request: Request) {
     const inviteCode = String(formData.get("invite_code") ?? "").trim();
 
     if (!inviteCode) {
+      await recordAuthEvent(
+        {
+          category: "login",
+          event_type: "invite_registration_code_missing",
+          success: false,
+          auth_scope: "user",
+          provider: "linuxdo",
+          target_path: "/user/invite",
+          message: "请输入邀请码",
+        },
+        {request}
+      );
       return redirectWithError(request, "请输入邀请码");
     }
 
     const invite = await findAvailableUserInviteCode(inviteCode);
     if (!invite) {
+      await recordAuthEvent(
+        {
+          category: "login",
+          event_type: "invite_registration_code_invalid",
+          success: false,
+          auth_scope: "user",
+          provider: "linuxdo",
+          target_path: "/user/invite",
+          message: "邀请码无效或已失效",
+        },
+        {request}
+      );
       return redirectWithError(request, "邀请码无效或已失效");
     }
 
@@ -85,7 +123,7 @@ export async function POST(request: Request) {
     resetGatewayApiKeyAuthCache();
 
     const session = await createUserSession(user.id);
-    const response = NextResponse.redirect(new URL(redirectTo, request.url));
+    const response = NextResponse.redirect(buildAppUrl(request, redirectTo));
     response.cookies.delete(USER_OAUTH_PENDING_TOKEN_COOKIE);
     response.cookies.delete(USER_OAUTH_PENDING_PROFILE_COOKIE);
     response.cookies.delete(USER_OAUTH_PENDING_REDIRECT_COOKIE);
@@ -95,9 +133,38 @@ export async function POST(request: Request) {
       getUserSessionCookieOptions(session.expiresAt)
     );
 
+    await recordAuthEvent(
+      {
+        category: "login",
+        event_type: "invite_registration_completed",
+        success: true,
+        auth_scope: "user",
+        actor_user_id: user.id,
+        actor_username: user.username,
+        actor_display_name: user.display_name,
+        actor_role: user.role,
+        provider: "linuxdo",
+        target_path: redirectTo,
+        message: "邀请码注册并登录成功",
+      },
+      {request}
+    );
+
     return response;
   } catch (error) {
     const message = toPublicUserAuthErrorMessage(error, "邀请码注册失败");
+    await recordAuthEvent(
+      {
+        category: "error",
+        event_type: "invite_registration_failed",
+        success: false,
+        auth_scope: "user",
+        provider: "linuxdo",
+        target_path: "/user/invite",
+        message,
+      },
+      {request}
+    );
     return redirectWithError(request, message);
   }
 }

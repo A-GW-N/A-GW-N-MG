@@ -1,5 +1,5 @@
 import Link from "next/link";
-import {ArrowRight, BarChart3, FilePenLine, KeyRound, Layers3, ShieldCheck, Users2} from "lucide-react";
+import {ArrowRight, BarChart3, FilePenLine, FileText, KeyRound, Layers3, ShieldCheck, Users2} from "lucide-react";
 
 import {HomepageBlockManager} from "@/components/admin/homepage-block-manager";
 import {AdminLogoutButton} from "@/components/admin/admin-logout-button";
@@ -163,6 +163,27 @@ export function AdminPage({
                   <h2 className="mt-2 text-2xl font-bold tracking-tight">统计与中转维护</h2>
                   <p className="mt-2 text-sm leading-6 text-muted-foreground">
                     进入独立的 `/admin/statistics-management` 页面维护上游中转、账号池注册和统计卡片定义。
+                  </p>
+                </div>
+              </div>
+              <ArrowRight className="h-5 w-5 shrink-0" />
+            </Link>
+
+            <Link
+              href="/admin/logs"
+              className="mt-4 flex items-center justify-between gap-4 rounded-[1.8rem] border border-border/50 bg-background/68 p-5 shadow-[0_18px_40px_rgba(0,0,0,0.08)] backdrop-blur-sm transition hover:border-border/70 hover:bg-background/78"
+            >
+              <div className="flex items-center gap-4">
+                <div className="grid h-12 w-12 place-items-center rounded-2xl border border-border/40 bg-background/75">
+                  <FileText className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.28em] text-muted-foreground">
+                    Logs Center
+                  </p>
+                  <h2 className="mt-2 text-2xl font-bold tracking-tight">详细请求日志</h2>
+                  <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                    进入独立的 `/admin/logs` 页面查看详细请求、状态、来源、用户、token 和 metadata 全字段。
                   </p>
                 </div>
               </div>

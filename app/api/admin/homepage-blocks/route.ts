@@ -34,8 +34,17 @@ export async function PUT(request: Request) {
     const body = await request.json();
     const blocks = Array.isArray(body?.blocks) ? (body.blocks as HomepageBlockInput[]) : [];
     const content = body?.content as HomepageContentInput | undefined;
+    const currentContent = await loadHomepageContent();
     const saved = await saveHomepageBlocks(blocks);
-    const savedContent = await saveHomepageContent(content ?? (await loadHomepageContent()));
+    const savedContent = await saveHomepageContent(
+      content ?? {
+        content_key: currentContent.content_key,
+        title: currentContent.title,
+        hero_title: currentContent.hero_title ?? undefined,
+        hero_subtitle: currentContent.hero_subtitle ?? undefined,
+        markdown: currentContent.markdown,
+      }
+    );
     return NextResponse.json({blocks: saved, content: savedContent});
   } catch (error) {
     const message = error instanceof Error ? error.message : "保存主页方块失败";
