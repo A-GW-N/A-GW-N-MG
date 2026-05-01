@@ -2,6 +2,8 @@ import "server-only";
 
 import {randomBytes} from "node:crypto";
 
+import {buildAppUrl} from "@/lib/utils/request-url";
+
 const DEFAULT_LINUXDO_AUTHORIZATION_URL = "https://connect.linux.do/oauth2/authorize";
 const DEFAULT_LINUXDO_TOKEN_URL = "https://connect.linuxdo.org/oauth2/token";
 const DEFAULT_LINUXDO_PROFILE_URL = "https://connect.linuxdo.org/api/user";
@@ -75,12 +77,49 @@ function toLinuxdoFetchError(error: unknown, phase: "token" | "profile") {
   return new Error(fallbackMessage);
 }
 
-export function getLinuxdoOAuthConfig() {
+function isLoopbackHostname(hostname: string) {
+  const normalized = hostname.trim().toLowerCase();
+  return (
+    normalized === "localhost" ||
+    normalized === "127.0.0.1" ||
+    normalized === "0.0.0.0" ||
+    normalized === "::1" ||
+    normalized === "[::1]"
+  );
+}
+
+function resolveLinuxdoCallbackUrl(request?: Request) {
+  const configuredCallbackUrl = process.env.LINUXDO_OAUTH_CALLBACK_URL?.trim() ?? "";
+  if (configuredCallbackUrl) {
+    try {
+      const configuredUrl = new URL(configuredCallbackUrl);
+      if (!request || !isLoopbackHostname(configuredUrl.hostname)) {
+        return configuredUrl.toString();
+      }
+    } catch {
+      if (!request) {
+        return configuredCallbackUrl;
+      }
+    }
+  }
+
+  if (request) {
+    return buildAppUrl(request, "/api/user/oauth/linuxdo/callback").toString();
+  }
+
+  if (configuredCallbackUrl) {
+    return configuredCallbackUrl;
+  }
+
+  throw new Error("缺少环境变量 LINUXDO_OAUTH_CALLBACK_URL");
+}
+
+export function getLinuxdoOAuthConfig(request?: Request) {
   const endpoints = resolveLinuxdoEndpoints();
   return {
     clientId: requireEnv("LINUXDO_OAUTH_CLIENT_ID"),
     clientSecret: requireEnv("LINUXDO_OAUTH_CLIENT_SECRET"),
-    callbackUrl: requireEnv("LINUXDO_OAUTH_CALLBACK_URL"),
+    callbackUrl: resolveLinuxdoCallbackUrl(request),
     scope: process.env.LINUXDO_OAUTH_SCOPE?.trim() || "",
     ...endpoints,
   };
@@ -90,8 +129,8 @@ export function createOAuthState() {
   return randomBytes(24).toString("base64url");
 }
 
-export function buildLinuxdoAuthorizationURL(state: string) {
-  const config = getLinuxdoOAuthConfig();
+export function buildLinuxdoAuthorizationURL(state: string, request?: Request) {
+  const config = getLinuxdoOAuthConfig(request);
   const url = new URL(config.authorizationUrl);
 
   url.searchParams.set("client_id", config.clientId);
@@ -137,8 +176,8 @@ export function toPublicUserAuthErrorMessage(error: unknown, fallback: string) {
   return fallback;
 }
 
-export async function exchangeLinuxdoCode(code: string) {
-  const config = getLinuxdoOAuthConfig();
+export async function exchangeLinuxdoCode(code: string, request?: Request) {
+  const config = getLinuxdoOAuthConfig(request);
   const body = new URLSearchParams({
     grant_type: "authorization_code",
     code,
@@ -178,10 +217,10 @@ export async function exchangeLinuxdoCode(code: string) {
 }
 
 export async function fetchLinuxdoProfile(accessToken: string) {
-  const config = getLinuxdoOAuthConfig();
+  const {profileUrl} = resolveLinuxdoEndpoints();
   let response: Response;
   try {
-    response = await fetch(config.profileUrl, {
+    response = await fetch(profileUrl, {
       headers: {
         Authorization: `Bearer ${accessToken}`,
         Accept: "application/json",

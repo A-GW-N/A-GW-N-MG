@@ -117,6 +117,8 @@ export interface HomepageBlockRow {
 export interface HomepageContentRow {
   content_key: string;
   title: string;
+  hero_title?: string | null;
+  hero_subtitle?: string | null;
   markdown: string;
   created_at?: string;
   updated_at?: string;
@@ -286,6 +288,28 @@ export interface GatewayRequestLogRow {
   tool_count?: number | null;
   image_count?: number | null;
   error_message?: string | null;
+  metadata?: Record<string, unknown> | null;
+  created_at?: string;
+}
+
+/**
+ * auth_event_logs 表的行类型
+ */
+export interface AuthEventLogRow {
+  id: string;
+  category: "login" | "logout" | "access" | "error";
+  event_type: string;
+  success: boolean;
+  auth_scope: "user" | "admin";
+  actor_user_id?: string | null;
+  actor_username?: string | null;
+  actor_display_name?: string | null;
+  actor_role?: string | null;
+  provider?: string | null;
+  target_path?: string | null;
+  ip_address?: string | null;
+  user_agent?: string | null;
+  message?: string | null;
   metadata?: Record<string, unknown> | null;
   created_at?: string;
 }

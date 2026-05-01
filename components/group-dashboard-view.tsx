@@ -214,7 +214,6 @@ export function GroupDashboardView({ groupName, initialData }: GroupDashboardVie
               </a>
             )}
           </div>
-          
            <div className="flex flex-wrap items-center gap-2.5">
             {statusSummary.operational > 0 && (
                <span className="inline-flex items-center gap-1.5 rounded-full bg-green-500/10 px-2.5 py-0.5 text-xs font-medium text-green-700 dark:text-green-400">

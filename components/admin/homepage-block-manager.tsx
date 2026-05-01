@@ -34,7 +34,10 @@ type EditableBlock = Pick<
   | "is_active"
 >;
 
-type EditableContent = Pick<HomepageContentRow, "content_key" | "title" | "markdown">;
+type EditableContent = Pick<
+  HomepageContentRow,
+  "content_key" | "title" | "hero_title" | "hero_subtitle" | "markdown"
+>;
 
 type EditorState =
   | {
@@ -422,6 +425,32 @@ function EditorModal({
                 />
               </label>
               <label className="grid gap-2 text-sm">
+                <span className="font-medium text-foreground/74 dark:text-white/74">Welcome Title</span>
+                <input
+                  value={localState.draft.hero_title ?? ""}
+                  onChange={(event) =>
+                    setLocalState({
+                      ...localState,
+                      draft: {...localState.draft, hero_title: event.target.value},
+                    })
+                  }
+                  className="rounded-2xl border border-black/10 bg-white/72 px-4 py-3 text-foreground outline-none transition-colors focus:border-black/24 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:border-white/24"
+                />
+              </label>
+              <label className="grid gap-2 text-sm">
+                <span className="font-medium text-foreground/74 dark:text-white/74">Welcome Subtitle</span>
+                <input
+                  value={localState.draft.hero_subtitle ?? ""}
+                  onChange={(event) =>
+                    setLocalState({
+                      ...localState,
+                      draft: {...localState.draft, hero_subtitle: event.target.value},
+                    })
+                  }
+                  className="rounded-2xl border border-black/10 bg-white/72 px-4 py-3 text-foreground outline-none transition-colors focus:border-black/24 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:border-white/24"
+                />
+              </label>
+              <label className="grid gap-2 text-sm">
                 <span className="font-medium text-foreground/74 dark:text-white/74">Markdown</span>
                 <textarea
                   value={localState.draft.markdown}
@@ -440,6 +469,17 @@ function EditorModal({
                 Live Preview
               </p>
               <h4 className="mt-3 text-2xl font-semibold">{localState.draft.title}</h4>
+              <div className="mt-4 rounded-[1.2rem] border border-black/8 bg-white/62 p-4 dark:border-white/8 dark:bg-black/20">
+                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-foreground/40 dark:text-white/40">
+                  Welcome Header
+                </p>
+                <h5 className="mt-3 text-3xl font-black leading-none tracking-[-0.05em]">
+                  {localState.draft.hero_title || "AI SERVICES"}
+                </h5>
+                <p className="mt-2 text-lg font-semibold text-foreground/55 dark:text-white/55">
+                  {localState.draft.hero_subtitle || "INTELLIGENCE MONITOR"}
+                </p>
+              </div>
               <div className="mt-5 max-h-[480px] overflow-y-auto rounded-[1.45rem] border border-black/8 bg-white/62 p-5 dark:border-white/8 dark:bg-black/20">
                 <MarkdownContent content={localState.draft.markdown} />
               </div>
@@ -481,6 +521,8 @@ export function HomepageBlockManager({
   const [content, setContent] = useState<EditableContent>({
     content_key: initialContent.content_key,
     title: initialContent.title,
+    hero_title: initialContent.hero_title ?? "",
+    hero_subtitle: initialContent.hero_subtitle ?? "",
     markdown: initialContent.markdown,
   });
   const [isPending, startTransition] = useTransition();
@@ -612,6 +654,8 @@ export function HomepageBlockManager({
         setContent({
           content_key: result.content.content_key,
           title: result.content.title,
+          hero_title: result.content.hero_title ?? "",
+          hero_subtitle: result.content.hero_subtitle ?? "",
           markdown: result.content.markdown,
         });
         setStatusMessage("主页内容已保存到数据库");

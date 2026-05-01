@@ -6,6 +6,7 @@
 // 数据库类型
 export type {
   AccountPoolRegistryRow,
+  AuthEventLogRow,
   CheckConfigRow,
   CheckHistoryRow,
   CheckModelRow,
@@ -13,6 +14,7 @@ export type {
   GatewayApiKeyRow,
   GatewayApiKeyUsageRow,
   GatewayRequestLogRow,
+  GroupInfoRow,
   HomepageBlockRow,
   HomepageContentRow,
   StatisticsAccountPoolRow,

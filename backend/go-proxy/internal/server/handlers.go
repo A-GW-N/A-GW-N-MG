@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 	"time"
@@ -119,8 +120,44 @@ func (s *Server) proxyRequest(w http.ResponseWriter, r *http.Request, incomingMo
 		return
 	}
 
+	requestMetadata := buildRequestMetadata(r, incomingMode, body)
+
 	normalizedBody, externalModel, mappedModel, brand, toolCount, imageCount, err := normalizeRequestBody(body, profile, incomingMode)
 	if err != nil {
+		storeCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+
+		if logErr := s.store.InsertRequestLog(storeCtx, openai.RequestLog{
+			RequestID:           requestID,
+			ProfileID:           profile.ID,
+			GatewayAPIKeyID:     forwardedKeyID,
+			GatewayAPIKeyName:   forwardedKeyName,
+			GatewayAPIKeyPrefix: forwardedKeyPrefix,
+			UserID:              forwardedUserID,
+			ExternalModel:       externalModel,
+			MappedModel:         mappedModel,
+			Brand:               brand,
+			RequestMode:         profile.RequestMode,
+			Success:             false,
+			StatusCode:          http.StatusBadRequest,
+			LatencyMS:           int(time.Since(startedAt).Milliseconds()),
+			RPMCount:            1,
+			ToolCount:           toolCount,
+			ImageCount:          imageCount,
+			ErrorMessage:        errorMessage(err),
+			Metadata: mergeMetadata(requestMetadata, map[string]any{
+				"profile_key":           profile.ProfileKey,
+				"profile_display_name":  profile.DisplayName,
+				"provider_slug":         profile.ProviderSlug,
+				"incoming_mode":         incomingMode,
+				"api_key_name":          forwardedKeyName,
+				"failure_stage":         "normalize_request_body",
+				"normalized_body_size":  0,
+				"normalized_body_preview": map[string]any{},
+			}),
+		}); logErr != nil {
+			log.Printf("failed to persist normalize error log %s: %v", requestID, logErr)
+		}
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
@@ -149,12 +186,18 @@ func (s *Server) proxyRequest(w http.ResponseWriter, r *http.Request, incomingMo
 			ToolCount:           toolCount,
 			ImageCount:          imageCount,
 			ErrorMessage:        errorMessage(responseErr),
-			Metadata: map[string]any{
-				"profile_key":   profile.ProfileKey,
-				"provider_slug": profile.ProviderSlug,
-				"incoming_mode": incomingMode,
-				"api_key_name":  forwardedKeyName,
-			},
+			Metadata: mergeMetadata(requestMetadata, map[string]any{
+				"profile_key":             profile.ProfileKey,
+				"profile_display_name":    profile.DisplayName,
+				"provider_slug":           profile.ProviderSlug,
+				"incoming_mode":           incomingMode,
+				"api_key_name":            forwardedKeyName,
+				"failure_stage":           "forward_request",
+				"normalized_body_size":    len(normalizedBody),
+				"normalized_body_preview": buildBodyPreview(normalizedBody),
+				"upstream_endpoint":       sanitizeUpstreamURL(profile.EndpointURL),
+				"model_mapping_applied":   mappedModel != externalModel,
+			}),
 		}); err != nil {
 			log.Printf("failed to persist request log %s: %v", requestID, err)
 		}
@@ -183,6 +226,7 @@ func (s *Server) proxyRequest(w http.ResponseWriter, r *http.Request, incomingMo
 	}
 
 	selectedPoolName := firstPoolTableName(pools, dynamicTables)
+	selectedPoolSource := detectPoolSource(pools, dynamicTables, selectedPoolName)
 
 	logErr := responseErr
 	if logErr == nil {
@@ -212,13 +256,30 @@ func (s *Server) proxyRequest(w http.ResponseWriter, r *http.Request, incomingMo
 		ToolCount:           toolCount,
 		ImageCount:          imageCount,
 		ErrorMessage:        errorMessage(logErr),
-		Metadata: map[string]any{
-			"profile_key":        profile.ProfileKey,
-			"provider_slug":      profile.ProviderSlug,
-			"dynamic_pool_table": selectedPoolName,
-			"incoming_mode":      incomingMode,
-			"api_key_name":       forwardedKeyName,
-		},
+		Metadata: mergeMetadata(requestMetadata, map[string]any{
+			"profile_key":              profile.ProfileKey,
+			"profile_display_name":     profile.DisplayName,
+			"provider_slug":            profile.ProviderSlug,
+			"dynamic_pool_table":       selectedPoolName,
+			"incoming_mode":            incomingMode,
+			"api_key_name":             forwardedKeyName,
+			"normalized_body_size":     len(normalizedBody),
+			"normalized_body_preview":  buildBodyPreview(normalizedBody),
+			"upstream_endpoint":        sanitizeUpstreamURL(profile.EndpointURL),
+			"model_mapping_applied":    mappedModel != externalModel,
+			"response_body_size":       len(responseBody),
+			"response_body_preview":    buildResponsePreview(responseBody),
+			"response_content_type":    truncateString(upstreamResponse.Header.Get("Content-Type"), 256),
+			"response_content_length":  truncateString(upstreamResponse.Header.Get("Content-Length"), 64),
+			"response_server":          truncateString(upstreamResponse.Header.Get("Server"), 128),
+			"response_request_id":      truncateString(firstNonEmpty(upstreamResponse.Header.Get("x-request-id"), upstreamResponse.Header.Get("request-id")), 128),
+			"failure_stage":            detectFailureStage(relayErr, responseStatusCode),
+			"selected_pool_source":     selectedPoolSource,
+			"active_pool_count":        len(pools),
+			"dynamic_pool_table_count": len(dynamicTables),
+			"active_pool_tables":       summarizeStringSlice(extractPoolTableNames(pools), 10),
+			"dynamic_pool_tables":      summarizeStringSlice(dynamicTables, 10),
+		}),
 	}); err != nil {
 		log.Printf("failed to persist request log %s: %v", requestID, err)
 	}
@@ -698,6 +759,34 @@ func firstPoolTableName(pools []openai.AccountPool, dynamicTables []string) stri
 	return ""
 }
 
+func extractPoolTableNames(pools []openai.AccountPool) []string {
+	result := make([]string, 0, len(pools))
+	for _, pool := range pools {
+		if strings.TrimSpace(pool.TableName) == "" {
+			continue
+		}
+		result = append(result, pool.TableName)
+	}
+	return result
+}
+
+func detectPoolSource(pools []openai.AccountPool, dynamicTables []string, selected string) string {
+	if selected == "" {
+		return "none"
+	}
+	for _, pool := range pools {
+		if pool.TableName == selected {
+			return "registry"
+		}
+	}
+	for _, table := range dynamicTables {
+		if table == selected {
+			return "dynamic"
+		}
+	}
+	return "unknown"
+}
+
 func numberValue(value any) float64 {
 	switch typed := value.(type) {
 	case float64:
@@ -739,6 +828,340 @@ func errorMessage(err error) string {
 		return ""
 	}
 	return err.Error()
+}
+
+func buildRequestMetadata(r *http.Request, incomingMode string, body []byte) map[string]any {
+	return map[string]any{
+		"http_method":         r.Method,
+		"request_path":        r.URL.Path,
+		"request_query":       sanitizeQuery(r.URL.Query()),
+		"request_host":        r.Host,
+		"request_remote_addr": r.RemoteAddr,
+		"incoming_mode":       incomingMode,
+		"user_agent":          truncateString(r.UserAgent(), 512),
+		"content_length":      len(body),
+		"content_type":        truncateString(r.Header.Get("Content-Type"), 256),
+		"accept":              truncateString(r.Header.Get("Accept"), 256),
+		"accept_language":     truncateString(r.Header.Get("Accept-Language"), 256),
+		"origin":              truncateString(r.Header.Get("Origin"), 256),
+		"referer":             truncateString(r.Header.Get("Referer"), 512),
+		"x_forwarded_for":     truncateString(r.Header.Get("X-Forwarded-For"), 512),
+		"x_forwarded_host":    truncateString(r.Header.Get("X-Forwarded-Host"), 256),
+		"x_forwarded_proto":   truncateString(r.Header.Get("X-Forwarded-Proto"), 64),
+		"cf_connecting_ip":    truncateString(r.Header.Get("CF-Connecting-IP"), 128),
+		"cf_ray":              truncateString(r.Header.Get("CF-Ray"), 128),
+		"x_real_ip":           truncateString(r.Header.Get("X-Real-IP"), 128),
+		"sec_fetch_site":      truncateString(r.Header.Get("Sec-Fetch-Site"), 64),
+		"sec_fetch_mode":      truncateString(r.Header.Get("Sec-Fetch-Mode"), 64),
+		"sec_fetch_dest":      truncateString(r.Header.Get("Sec-Fetch-Dest"), 64),
+		"request_body_preview": buildBodyPreview(body),
+	}
+}
+
+func sanitizeQuery(values url.Values) map[string]any {
+	if len(values) == 0 {
+		return map[string]any{}
+	}
+
+	result := make(map[string]any, len(values))
+	for key, items := range values {
+		lowerKey := strings.ToLower(strings.TrimSpace(key))
+		if strings.Contains(lowerKey, "key") ||
+			strings.Contains(lowerKey, "token") ||
+			strings.Contains(lowerKey, "secret") ||
+			strings.Contains(lowerKey, "password") {
+			result[key] = "[redacted]"
+			continue
+		}
+
+		if len(items) == 1 {
+			result[key] = truncateString(items[0], 256)
+			continue
+		}
+
+		sanitized := make([]string, 0, len(items))
+		for _, item := range items {
+			sanitized = append(sanitized, truncateString(item, 256))
+		}
+		result[key] = sanitized
+	}
+
+	return result
+}
+
+func buildBodyPreview(body []byte) any {
+	if len(body) == 0 {
+		return map[string]any{}
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(body, &payload); err == nil {
+		return sanitizePayload(payload)
+	}
+
+	return truncateString(string(body), 2000)
+}
+
+func sanitizePayload(payload map[string]any) map[string]any {
+	result := make(map[string]any, len(payload))
+	for key, value := range payload {
+		lowerKey := strings.ToLower(strings.TrimSpace(key))
+		switch {
+		case lowerKey == "messages":
+			result[key] = summarizeMessages(value)
+		case lowerKey == "input":
+			result[key] = summarizeInput(value)
+		case strings.Contains(lowerKey, "key"),
+			strings.Contains(lowerKey, "token"),
+			strings.Contains(lowerKey, "secret"),
+			strings.Contains(lowerKey, "password"),
+			lowerKey == "authorization":
+			result[key] = "[redacted]"
+		default:
+			result[key] = sanitizeValue(value)
+		}
+	}
+
+	return result
+}
+
+func sanitizeValue(value any) any {
+	switch typed := value.(type) {
+	case string:
+		return truncateString(typed, 600)
+	case []any:
+		items := make([]any, 0, len(typed))
+		for index, item := range typed {
+			if index >= 10 {
+				items = append(items, "[truncated]")
+				break
+			}
+			items = append(items, sanitizeValue(item))
+		}
+		return items
+	case map[string]any:
+		return sanitizePayload(typed)
+	default:
+		return value
+	}
+}
+
+func summarizeMessages(value any) any {
+	items, ok := value.([]any)
+	if !ok {
+		return sanitizeValue(value)
+	}
+
+	summary := make([]map[string]any, 0, len(items))
+	for index, item := range items {
+		if index >= 8 {
+			summary = append(summary, map[string]any{"truncated": true})
+			break
+		}
+
+		message, ok := item.(map[string]any)
+		if !ok {
+			summary = append(summary, map[string]any{"value": sanitizeValue(item)})
+			continue
+		}
+
+		entry := map[string]any{
+			"role": message["role"],
+		}
+		if content, exists := message["content"]; exists {
+			entry["content_preview"] = summarizeContent(content)
+		}
+		summary = append(summary, entry)
+	}
+
+	return summary
+}
+
+func summarizeInput(value any) any {
+	items, ok := value.([]any)
+	if !ok {
+		return sanitizeValue(value)
+	}
+
+	summary := make([]any, 0, len(items))
+	for index, item := range items {
+		if index >= 8 {
+			summary = append(summary, map[string]any{"truncated": true})
+			break
+		}
+		summary = append(summary, summarizeContent(item))
+	}
+	return summary
+}
+
+func summarizeContent(value any) any {
+	switch typed := value.(type) {
+	case string:
+		return truncateString(typed, 400)
+	case []any:
+		result := make([]any, 0, len(typed))
+		for index, item := range typed {
+			if index >= 8 {
+				result = append(result, map[string]any{"truncated": true})
+				break
+			}
+
+			itemMap, ok := item.(map[string]any)
+			if !ok {
+				result = append(result, sanitizeValue(item))
+				continue
+			}
+
+			entry := map[string]any{
+				"type": itemMap["type"],
+			}
+			if text, ok := itemMap["text"].(string); ok {
+				entry["text_preview"] = truncateString(text, 300)
+			}
+			if imageURL, ok := itemMap["image_url"]; ok {
+				entry["image_url"] = sanitizeValue(imageURL)
+			}
+			result = append(result, entry)
+		}
+		return result
+	case map[string]any:
+		return sanitizePayload(typed)
+	default:
+		return sanitizeValue(value)
+	}
+}
+
+func buildResponsePreview(body []byte) any {
+	if len(body) == 0 {
+		return map[string]any{}
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(body, &payload); err == nil {
+		return sanitizeResponsePayload(payload)
+	}
+
+	return truncateString(string(body), 2000)
+}
+
+func sanitizeResponsePayload(payload map[string]any) map[string]any {
+	result := make(map[string]any, len(payload))
+	for key, value := range payload {
+		lowerKey := strings.ToLower(strings.TrimSpace(key))
+		switch lowerKey {
+		case "choices":
+			result[key] = summarizeChoices(value)
+		case "content":
+			result[key] = summarizeContent(value)
+		case "usage":
+			result[key] = sanitizeValue(value)
+		case "error":
+			result[key] = sanitizeValue(value)
+		default:
+			result[key] = sanitizeValue(value)
+		}
+	}
+
+	return result
+}
+
+func summarizeChoices(value any) any {
+	items, ok := value.([]any)
+	if !ok {
+		return sanitizeValue(value)
+	}
+
+	summary := make([]map[string]any, 0, len(items))
+	for index, item := range items {
+		if index >= 5 {
+			summary = append(summary, map[string]any{"truncated": true})
+			break
+		}
+
+		itemMap, ok := item.(map[string]any)
+		if !ok {
+			summary = append(summary, map[string]any{"value": sanitizeValue(item)})
+			continue
+		}
+
+		entry := map[string]any{
+			"index":       itemMap["index"],
+			"finish_reason": itemMap["finish_reason"],
+		}
+		if message, ok := itemMap["message"].(map[string]any); ok {
+			entry["message"] = map[string]any{
+				"role":            message["role"],
+				"content_preview": summarizeContent(message["content"]),
+			}
+		}
+		if delta, ok := itemMap["delta"].(map[string]any); ok {
+			entry["delta"] = map[string]any{
+				"role":            delta["role"],
+				"content_preview": summarizeContent(delta["content"]),
+			}
+		}
+		summary = append(summary, entry)
+	}
+
+	return summary
+}
+
+func sanitizeUpstreamURL(raw string) string {
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return truncateString(raw, 256)
+	}
+
+	return truncateString(parsed.Scheme+"://"+parsed.Host+parsed.Path, 256)
+}
+
+func detectFailureStage(relayErr error, responseStatusCode int) string {
+	if relayErr != nil {
+		return "relay_response"
+	}
+	if responseStatusCode >= 400 {
+		return "upstream_http_error"
+	}
+	return "completed"
+}
+
+func summarizeStringSlice(values []string, limit int) []string {
+	if len(values) == 0 {
+		return []string{}
+	}
+
+	capSize := len(values)
+	if limit > 0 && limit < capSize {
+		capSize = limit
+	}
+	result := make([]string, 0, capSize)
+	for index, value := range values {
+		if index >= limit {
+			result = append(result, "[truncated]")
+			break
+		}
+		result = append(result, truncateString(value, 128))
+	}
+	return result
+}
+
+func truncateString(value string, limit int) string {
+	value = strings.TrimSpace(value)
+	if limit <= 0 || len(value) <= limit {
+		return value
+	}
+	return value[:limit] + "...[truncated]"
+}
+
+func mergeMetadata(base map[string]any, extra map[string]any) map[string]any {
+	result := make(map[string]any, len(base)+len(extra))
+	for key, value := range base {
+		result[key] = value
+	}
+	for key, value := range extra {
+		result[key] = value
+	}
+	return result
 }
 
 func buildRequestID() string {
