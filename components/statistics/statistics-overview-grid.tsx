@@ -172,14 +172,11 @@ function AccountPoolList({rows}: {rows: StatisticsAccountPoolRow[]}) {
         <div key={row.id} className="rounded-[1rem] border border-black/8 bg-black/[0.03] px-4 py-3 dark:border-white/8 dark:bg-black/20">
           <div className="flex items-center justify-between gap-3">
             <p className="text-sm font-medium text-foreground dark:text-white">{row.pool_name}</p>
-            <span className="rounded-full border border-black/8 bg-black/[0.02] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-foreground/52 dark:border-white/10 dark:bg-white/[0.035] dark:text-white/52">
-              {row.status_label}
-            </span>
           </div>
           <div className="mt-3 flex items-center justify-between text-sm text-muted-foreground dark:text-white/58">
-            <span>活跃账号</span>
+            <span>账号数</span>
             <span className="font-semibold text-foreground dark:text-white">
-              {row.active_accounts}/{row.total_accounts}
+              {row.total_accounts}
             </span>
           </div>
         </div>

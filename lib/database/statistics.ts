@@ -461,15 +461,9 @@ async function loadLogDerivedStatisticsDashboard(): Promise<StatisticsDashboardD
       const registry = registryRows[index];
       const normalizedTableName = registry.table_name.trim();
       const poolState = poolLogMap.get(normalizedTableName);
-      const metadata = registry?.metadata as Record<string, unknown> | null | undefined;
-      const metadataActive =
-        asNumber(metadata?.active_accounts) ||
-        asNumber(metadata?.active_total) ||
-        asNumber(metadata?.active);
-
       const totalAccounts = poolRowCounts.get(normalizedTableName) ?? poolState?.allTime.size ?? 0;
-      const activeAccounts = metadataActive || poolState?.recent.size || 0;
-      const statusLabel = activeAccounts > 0 ? "Active" : totalAccounts > 0 ? "Idle" : "Empty";
+      const activeAccounts = 0;
+      const statusLabel = totalAccounts > 0 ? "Ready" : "Empty";
 
       return {
         id: registry?.id ?? `pool-${index}-${normalizedTableName}`,
