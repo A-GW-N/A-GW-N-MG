@@ -26,31 +26,32 @@ func (s *Server) handleModels(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	profile, err := s.store.LoadPrimaryProfile(r.Context())
+	profiles, err := s.store.LoadProfiles(r.Context())
 	if err != nil {
-		log.Printf("failed to load primary profile for /v1/models: %v", err)
+		log.Printf("failed to load gateway profiles for /v1/models: %v", err)
 		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "gateway profile is unavailable"})
 		return
 	}
 
-	forcedModel := forcedTargetModel(profile)
-	if forcedModel != "" && len(profile.ModelMappings) == 0 {
-		writeJSON(w, http.StatusOK, map[string]any{
-			"object": "list",
-			"data": []map[string]string{
-				{
-					"id":       forcedModel,
-					"object":   "model",
-					"owned_by": "agwn",
-				},
-			},
-		})
-		return
+	modelIDs := make(map[string]struct{})
+	for index := range profiles {
+		profile := &profiles[index]
+		if forcedModel := forcedTargetModel(profile); forcedModel != "" && len(profile.ModelMappings) == 0 {
+			modelIDs[forcedModel] = struct{}{}
+			continue
+		}
+		for external := range profile.ModelMappings {
+			external = strings.TrimSpace(external)
+			if external == "" {
+				continue
+			}
+			modelIDs[external] = struct{}{}
+		}
 	}
 
-	keys := make([]string, 0, len(profile.ModelMappings))
-	for external := range profile.ModelMappings {
-		keys = append(keys, external)
+	keys := make([]string, 0, len(modelIDs))
+	for modelID := range modelIDs {
+		keys = append(keys, modelID)
 	}
 	sort.Strings(keys)
 
@@ -107,9 +108,9 @@ func (s *Server) proxyRequest(w http.ResponseWriter, r *http.Request, incomingMo
 	ctx := r.Context()
 	requestID := buildRequestID()
 
-	profile, err := s.store.LoadPrimaryProfile(ctx)
+	profiles, err := s.store.LoadProfiles(ctx)
 	if err != nil {
-		log.Printf("failed to load primary profile for request %s: %v", requestID, err)
+		log.Printf("failed to load gateway profiles for request %s: %v", requestID, err)
 		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "no active gateway profile"})
 		return
 	}
@@ -121,6 +122,7 @@ func (s *Server) proxyRequest(w http.ResponseWriter, r *http.Request, incomingMo
 	}
 
 	requestMetadata := buildRequestMetadata(r, incomingMode, body)
+	profile := selectProfileForRequest(profiles, requestModelFromBody(body))
 
 	normalizedBody, externalModel, mappedModel, brand, toolCount, imageCount, err := normalizeRequestBody(body, profile, incomingMode)
 	if err != nil {
@@ -146,13 +148,13 @@ func (s *Server) proxyRequest(w http.ResponseWriter, r *http.Request, incomingMo
 			ImageCount:          imageCount,
 			ErrorMessage:        errorMessage(err),
 			Metadata: mergeMetadata(requestMetadata, map[string]any{
-				"profile_key":           profile.ProfileKey,
-				"profile_display_name":  profile.DisplayName,
-				"provider_slug":         profile.ProviderSlug,
-				"incoming_mode":         incomingMode,
-				"api_key_name":          forwardedKeyName,
-				"failure_stage":         "normalize_request_body",
-				"normalized_body_size":  0,
+				"profile_key":             profile.ProfileKey,
+				"profile_display_name":    profile.DisplayName,
+				"provider_slug":           profile.ProviderSlug,
+				"incoming_mode":           incomingMode,
+				"api_key_name":            forwardedKeyName,
+				"failure_stage":           "normalize_request_body",
+				"normalized_body_size":    0,
 				"normalized_body_preview": map[string]any{},
 			}),
 		}); logErr != nil {
@@ -383,6 +385,39 @@ func normalizeRequestBody(
 	}
 
 	return encoded, externalModel, mappedModel, brand, toolCount, imageCount, nil
+}
+
+func selectProfileForRequest(profiles []openai.GatewayProfile, requestedModel string) *openai.GatewayProfile {
+	if len(profiles) == 0 {
+		return nil
+	}
+
+	requestedModel = strings.TrimSpace(requestedModel)
+	if requestedModel != "" {
+		for index := range profiles {
+			profile := &profiles[index]
+			if _, ok := profile.ModelMappings[requestedModel]; ok {
+				return profile
+			}
+		}
+
+		for index := range profiles {
+			profile := &profiles[index]
+			if forcedModel := forcedTargetModel(profile); forcedModel != "" && forcedModel == requestedModel {
+				return profile
+			}
+		}
+	}
+
+	return &profiles[0]
+}
+
+func requestModelFromBody(body []byte) string {
+	payload := map[string]any{}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return ""
+	}
+	return stringValue(payload["model"])
 }
 
 func convertOpenAIToMessagesPayload(payload map[string]any) map[string]any {
@@ -832,28 +867,28 @@ func errorMessage(err error) string {
 
 func buildRequestMetadata(r *http.Request, incomingMode string, body []byte) map[string]any {
 	return map[string]any{
-		"http_method":         r.Method,
-		"request_path":        r.URL.Path,
-		"request_query":       sanitizeQuery(r.URL.Query()),
-		"request_host":        r.Host,
-		"request_remote_addr": r.RemoteAddr,
-		"incoming_mode":       incomingMode,
-		"user_agent":          truncateString(r.UserAgent(), 512),
-		"content_length":      len(body),
-		"content_type":        truncateString(r.Header.Get("Content-Type"), 256),
-		"accept":              truncateString(r.Header.Get("Accept"), 256),
-		"accept_language":     truncateString(r.Header.Get("Accept-Language"), 256),
-		"origin":              truncateString(r.Header.Get("Origin"), 256),
-		"referer":             truncateString(r.Header.Get("Referer"), 512),
-		"x_forwarded_for":     truncateString(r.Header.Get("X-Forwarded-For"), 512),
-		"x_forwarded_host":    truncateString(r.Header.Get("X-Forwarded-Host"), 256),
-		"x_forwarded_proto":   truncateString(r.Header.Get("X-Forwarded-Proto"), 64),
-		"cf_connecting_ip":    truncateString(r.Header.Get("CF-Connecting-IP"), 128),
-		"cf_ray":              truncateString(r.Header.Get("CF-Ray"), 128),
-		"x_real_ip":           truncateString(r.Header.Get("X-Real-IP"), 128),
-		"sec_fetch_site":      truncateString(r.Header.Get("Sec-Fetch-Site"), 64),
-		"sec_fetch_mode":      truncateString(r.Header.Get("Sec-Fetch-Mode"), 64),
-		"sec_fetch_dest":      truncateString(r.Header.Get("Sec-Fetch-Dest"), 64),
+		"http_method":          r.Method,
+		"request_path":         r.URL.Path,
+		"request_query":        sanitizeQuery(r.URL.Query()),
+		"request_host":         r.Host,
+		"request_remote_addr":  r.RemoteAddr,
+		"incoming_mode":        incomingMode,
+		"user_agent":           truncateString(r.UserAgent(), 512),
+		"content_length":       len(body),
+		"content_type":         truncateString(r.Header.Get("Content-Type"), 256),
+		"accept":               truncateString(r.Header.Get("Accept"), 256),
+		"accept_language":      truncateString(r.Header.Get("Accept-Language"), 256),
+		"origin":               truncateString(r.Header.Get("Origin"), 256),
+		"referer":              truncateString(r.Header.Get("Referer"), 512),
+		"x_forwarded_for":      truncateString(r.Header.Get("X-Forwarded-For"), 512),
+		"x_forwarded_host":     truncateString(r.Header.Get("X-Forwarded-Host"), 256),
+		"x_forwarded_proto":    truncateString(r.Header.Get("X-Forwarded-Proto"), 64),
+		"cf_connecting_ip":     truncateString(r.Header.Get("CF-Connecting-IP"), 128),
+		"cf_ray":               truncateString(r.Header.Get("CF-Ray"), 128),
+		"x_real_ip":            truncateString(r.Header.Get("X-Real-IP"), 128),
+		"sec_fetch_site":       truncateString(r.Header.Get("Sec-Fetch-Site"), 64),
+		"sec_fetch_mode":       truncateString(r.Header.Get("Sec-Fetch-Mode"), 64),
+		"sec_fetch_dest":       truncateString(r.Header.Get("Sec-Fetch-Dest"), 64),
 		"request_body_preview": buildBodyPreview(body),
 	}
 }
@@ -1085,7 +1120,7 @@ func summarizeChoices(value any) any {
 		}
 
 		entry := map[string]any{
-			"index":       itemMap["index"],
+			"index":         itemMap["index"],
 			"finish_reason": itemMap["finish_reason"],
 		}
 		if message, ok := itemMap["message"].(map[string]any); ok {

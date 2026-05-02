@@ -38,8 +38,19 @@ func (s *PostgresStore) Close() error {
 }
 
 func (s *PostgresStore) LoadPrimaryProfile(ctx context.Context) (*openai.GatewayProfile, error) {
+	profiles, err := s.LoadProfiles(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if len(profiles) == 0 {
+		return nil, fmt.Errorf("no enabled gateway profile found")
+	}
+	return &profiles[0], nil
+}
+
+func (s *PostgresStore) LoadProfiles(ctx context.Context) ([]openai.GatewayProfile, error) {
 	requestURL := fmt.Sprintf(
-		"%s/rest/v1/gateway_profiles?select=id,profile_key,display_name,provider_slug,endpoint_url,auth_mode,auth_token,request_mode,model_mappings,brand_mappings,default_headers,extra_payload,pool_table_pattern,is_enabled&is_enabled=eq.true&order=created_at.asc&limit=1",
+		"%s/rest/v1/gateway_profiles?select=id,profile_key,display_name,provider_slug,endpoint_url,auth_mode,auth_token,request_mode,model_mappings,brand_mappings,default_headers,extra_payload,pool_table_pattern,is_enabled&is_enabled=eq.true&order=created_at.asc",
 		s.baseURL,
 	)
 	body, err := s.request(ctx, http.MethodGet, requestURL, nil, "application/json")
@@ -71,23 +82,27 @@ func (s *PostgresStore) LoadPrimaryProfile(ctx context.Context) (*openai.Gateway
 		return nil, fmt.Errorf("no enabled gateway profile found")
 	}
 
-	row := rows[0]
-	return &openai.GatewayProfile{
-		ID:               row.ID,
-		ProfileKey:       row.ProfileKey,
-		DisplayName:      row.DisplayName,
-		ProviderSlug:     row.ProviderSlug,
-		EndpointURL:      row.EndpointURL,
-		AuthMode:         row.AuthMode,
-		AuthToken:        row.AuthToken,
-		RequestMode:      row.RequestMode,
-		ModelMappings:    row.ModelMappings,
-		BrandMappings:    row.BrandMappings,
-		DefaultHeaders:   row.DefaultHeaders,
-		ExtraPayload:     row.ExtraPayload,
-		PoolTablePattern: row.PoolTablePattern,
-		IsEnabled:        row.IsEnabled,
-	}, nil
+	result := make([]openai.GatewayProfile, 0, len(rows))
+	for _, row := range rows {
+		result = append(result, openai.GatewayProfile{
+			ID:               row.ID,
+			ProfileKey:       row.ProfileKey,
+			DisplayName:      row.DisplayName,
+			ProviderSlug:     row.ProviderSlug,
+			EndpointURL:      row.EndpointURL,
+			AuthMode:         row.AuthMode,
+			AuthToken:        row.AuthToken,
+			RequestMode:      row.RequestMode,
+			ModelMappings:    row.ModelMappings,
+			BrandMappings:    row.BrandMappings,
+			DefaultHeaders:   row.DefaultHeaders,
+			ExtraPayload:     row.ExtraPayload,
+			PoolTablePattern: row.PoolTablePattern,
+			IsEnabled:        row.IsEnabled,
+		})
+	}
+
+	return result, nil
 }
 
 func (s *PostgresStore) LoadActivePools(ctx context.Context) ([]openai.AccountPool, error) {

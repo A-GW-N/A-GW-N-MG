@@ -26,13 +26,12 @@ func New(cfg config.Config, pgStore *store.PostgresStore) *Server {
 	mux.HandleFunc("/v1/messages", srv.handleMessages)
 	mux.HandleFunc("/v1/models", srv.handleModels)
 
-	return &Server{
-		httpServer: &http.Server{
-			Addr:    cfg.Address(),
-			Handler: requestLogger(mux),
-		},
-		store: pgStore,
+	srv.httpServer = &http.Server{
+		Addr:    cfg.Address(),
+		Handler: requestLogger(mux),
 	}
+
+	return srv
 }
 
 func (s *Server) ListenAndServe() error {
