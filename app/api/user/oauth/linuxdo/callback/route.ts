@@ -132,6 +132,9 @@ export async function GET(request: Request) {
             metadata: {
               registration_mode: registrationSettings.registration_mode,
               oauth_subject: profile.subject,
+              linuxdo_trust_level: profile.trustLevel,
+              linuxdo_active: profile.active,
+              linuxdo_silenced: profile.silenced,
             },
           },
           {request}
@@ -155,6 +158,9 @@ export async function GET(request: Request) {
               registration_mode: registrationSettings.registration_mode,
               redirect_to: redirectTo,
               oauth_subject: profile.subject,
+              linuxdo_trust_level: profile.trustLevel,
+              linuxdo_active: profile.active,
+              linuxdo_silenced: profile.silenced,
             },
           },
           {request}
@@ -171,6 +177,9 @@ export async function GET(request: Request) {
               username: profile.username,
               displayName: profile.displayName,
               avatarUrl: profile.avatarUrl,
+              trustLevel: profile.trustLevel,
+              active: profile.active,
+              silenced: profile.silenced,
             })
           ),
           buildCookieOptions()
@@ -226,6 +235,9 @@ export async function GET(request: Request) {
           redirect_to: redirectTo,
           oauth_subject: profile.subject,
           oauth_username: profile.username,
+          linuxdo_trust_level: profile.trustLevel,
+          linuxdo_active: profile.active,
+          linuxdo_silenced: profile.silenced,
           user_created: !existingUser,
         },
       },

@@ -64,6 +64,7 @@ APP_BASE_URL=https://your-public-domain.example.com
 LINUXDO_OAUTH_CLIENT_ID=...
 LINUXDO_OAUTH_CLIENT_SECRET=...
 LINUXDO_OAUTH_CALLBACK_URL=
+LINUXDO_OAUTH_MINIMUM_TRUST_LEVEL=0
 
 GATEWAY_KEY_ENCRYPTION_SECRET=replace-with-a-long-random-secret
 GATEWAY_API_KEYS=sk-change-me
@@ -85,6 +86,8 @@ CHECK_CONCURRENCY=5
 - `GATEWAY_API_KEYS` 只建议作为应急回退 key。
 - 正式环境建议进入 `/admin/management` 创建数据库版 key。
 - `LINUXDO_OAUTH_*` 用于 `/user` 登录系统。
+- Linux.do 服务端 token / userinfo 默认使用 `connect.linuxdo.org`；浏览器授权入口默认使用 `connect.linux.do`。
+- `LINUXDO_OAUTH_MINIMUM_TRUST_LEVEL` 可限制 Linux.do 用户最低信任等级，默认 `0`。
 - 生产环境务必设置 `APP_BASE_URL` 为站点公网地址，例如 `https://your-domain.example.com`。
 - Docker / 反向代理环境建议将 `LINUXDO_OAUTH_CALLBACK_URL` 留空，让系统基于 `APP_BASE_URL` 或 `X-Forwarded-*` 头自动推导回调地址。
 - 如果必须显式填写 `LINUXDO_OAUTH_CALLBACK_URL`，必须使用公网回调地址，不能写成 `localhost`、`127.0.0.1`、`0.0.0.0` 或容器内地址。
@@ -198,6 +201,7 @@ Linux.do OAuth 在 Docker / 反向代理环境下的部署建议：
 ```env
 APP_BASE_URL=https://your-domain.example.com
 LINUXDO_OAUTH_CALLBACK_URL=
+LINUXDO_OAUTH_MINIMUM_TRUST_LEVEL=0
 ```
 
 说明：
@@ -206,6 +210,7 @@ LINUXDO_OAUTH_CALLBACK_URL=
 - 推荐留空 `LINUXDO_OAUTH_CALLBACK_URL`，系统会自动生成 `https://your-domain.example.com/api/user/oauth/linuxdo/callback`。
 - 如果你在 Linux.do 应用后台登记了固定回调地址，请保证它与实际公网域名完全一致。
 - 不要把回调地址配置成 `http://localhost:3000/...`，这只适用于本地开发。
+- 如需限制注册用户质量，可设置 `LINUXDO_OAUTH_MINIMUM_TRUST_LEVEL`；登录时还会拒绝未激活或已禁言的 Linux.do 账户。
 
 GitHub Actions 会自动执行：
 
@@ -251,12 +256,15 @@ https://your-domain/v1/models
 - `cookie_names`、`cookie_count`：回调时是否带回 `agwn_user_oauth_state`
 - `expected_state_present`：`false` 通常表示 state cookie 丢失
 - `internal_error`：服务端内部异常文本，适合排查 token 交换、用户资料获取、数据库写入等后续失败
+- `linuxdo_trust_level`、`linuxdo_active`、`linuxdo_silenced`：Linux.do 用户状态与信任等级
 
 常见问题：
 
 - 回调域名不一致：开始授权和回调落地不是同一个公网域名，导致 state cookie 丢失。
 - 容器内地址误配置：把 `LINUXDO_OAUTH_CALLBACK_URL` 写成 `localhost` 或容器地址，线上会出现 OAuth 校验异常或后续失败。
 - 反代头不完整：如果 `X-Forwarded-Host` / `X-Forwarded-Proto` 没正确传递，日志和回跳地址都会失真。
+- token 接口返回 HTML：常见于 Linux.do / Cloudflare 挑战页；服务端已使用 Basic Auth 与浏览器式请求头，日志中如果仍是 `status=403, content-type=text/html`，优先检查部署出口网络。
+- Linux.do 用户状态不满足：未激活、已禁言或信任等级低于 `LINUXDO_OAUTH_MINIMUM_TRUST_LEVEL` 会被拒绝。
 
 ## 参考文档
 

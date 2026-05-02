@@ -24,6 +24,9 @@ const SAFE_USER_ERROR_MESSAGES = [
   "邀请码会话已失效，请重新登录",
   "OAuth 回调校验失败",
   "该用户已被禁用",
+  "Linux.do 账户未激活",
+  "Linux.do 账户已被禁言",
+  "Linux.do 信任等级未达到要求",
   "Linux.do 返回的用户资料缺少必要字段",
 ];
 
@@ -43,9 +46,25 @@ function resolveLinuxdoEndpoints() {
   return {
     authorizationUrl:
       process.env.LINUXDO_OAUTH_AUTHORIZATION_URL?.trim() || DEFAULT_LINUXDO_AUTHORIZATION_URL,
-    tokenUrl: process.env.LINUXDO_OAUTH_TOKEN_URL?.trim() || DEFAULT_LINUXDO_TOKEN_URL,
-    profileUrl: process.env.LINUXDO_OAUTH_USERINFO_URL?.trim() || DEFAULT_LINUXDO_PROFILE_URL,
+    tokenUrl:
+      process.env.LINUXDO_OAUTH_TOKEN_URL?.trim() ||
+      process.env.LINUX_DO_TOKEN_ENDPOINT?.trim() ||
+      DEFAULT_LINUXDO_TOKEN_URL,
+    profileUrl:
+      process.env.LINUXDO_OAUTH_USERINFO_URL?.trim() ||
+      process.env.LINUX_DO_USER_ENDPOINT?.trim() ||
+      DEFAULT_LINUXDO_PROFILE_URL,
   };
+}
+
+function readLinuxdoMinimumTrustLevel() {
+  const raw =
+    process.env.LINUXDO_OAUTH_MINIMUM_TRUST_LEVEL?.trim() ||
+    process.env.LINUXDO_MINIMUM_TRUST_LEVEL?.trim() ||
+    process.env.LINUX_DO_MINIMUM_TRUST_LEVEL?.trim() ||
+    "0";
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : 0;
 }
 
 function toLinuxdoFetchError(error: unknown, phase: "token" | "profile") {
@@ -157,6 +176,7 @@ export function getLinuxdoOAuthConfig(request?: Request) {
     clientSecret: requireEnv("LINUXDO_OAUTH_CLIENT_SECRET"),
     callbackUrl: resolveLinuxdoCallbackUrl(request),
     scope: process.env.LINUXDO_OAUTH_SCOPE?.trim() || "",
+    minimumTrustLevel: readLinuxdoMinimumTrustLevel(),
     ...endpoints,
   };
 }
@@ -217,8 +237,6 @@ export async function exchangeLinuxdoCode(code: string, request?: Request) {
   const body = new URLSearchParams({
     grant_type: "authorization_code",
     code,
-    client_id: config.clientId,
-    client_secret: config.clientSecret,
     redirect_uri: config.callbackUrl,
   });
 
@@ -243,12 +261,13 @@ export async function exchangeLinuxdoCode(code: string, request?: Request) {
   const result = await parseLinuxdoJsonResponse<{
     access_token?: string;
     token_type?: string;
+    message?: string;
     error?: string;
     error_description?: string;
   }>(response, "token");
 
   if (!response.ok || !result.access_token) {
-    throw new Error(result.error_description || result.error || "Linux.do token 获取失败");
+    throw new Error(result.error_description || result.message || result.error || "Linux.do token 获取失败");
   }
 
   return result.access_token;
@@ -296,6 +315,23 @@ function readNestedNumber(record: Record<string, unknown>, key: string) {
   return null;
 }
 
+function readNestedBoolean(record: Record<string, unknown>, key: string) {
+  const value = record[key];
+  if (typeof value === "boolean") {
+    return value;
+  }
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (["true", "1", "yes"].includes(normalized)) {
+      return true;
+    }
+    if (["false", "0", "no"].includes(normalized)) {
+      return false;
+    }
+  }
+  return null;
+}
+
 export function normalizeLinuxdoProfile(profile: Record<string, unknown>) {
   const nestedUser =
     typeof profile.user === "object" && profile.user
@@ -339,8 +375,32 @@ export function normalizeLinuxdoProfile(profile: Record<string, unknown>) {
     avatarUrl = avatarUrl.replaceAll("{size}", "256");
   }
 
+  const trustLevel =
+    readNestedNumber(profile, "trust_level") ??
+    readNestedNumber(profile, "trustLevel") ??
+    (nestedUser
+      ? readNestedNumber(nestedUser, "trust_level") ?? readNestedNumber(nestedUser, "trustLevel")
+      : null);
+  const active =
+    readNestedBoolean(profile, "active") ??
+    (nestedUser ? readNestedBoolean(nestedUser, "active") : null);
+  const silenced =
+    readNestedBoolean(profile, "silenced") ??
+    (nestedUser ? readNestedBoolean(nestedUser, "silenced") : null);
+
   if (!subject || !username) {
     throw new Error("Linux.do 返回的用户资料缺少必要字段");
+  }
+  if (active === false) {
+    throw new Error("Linux.do 账户未激活");
+  }
+  if (silenced === true) {
+    throw new Error("Linux.do 账户已被禁言");
+  }
+
+  const minimumTrustLevel = readLinuxdoMinimumTrustLevel();
+  if ((trustLevel ?? 0) < minimumTrustLevel) {
+    throw new Error("Linux.do 信任等级未达到要求");
   }
 
   return {
@@ -348,6 +408,9 @@ export function normalizeLinuxdoProfile(profile: Record<string, unknown>) {
     username,
     displayName,
     avatarUrl: avatarUrl || null,
+    trustLevel,
+    active,
+    silenced,
     profileRaw: profile,
   };
 }
