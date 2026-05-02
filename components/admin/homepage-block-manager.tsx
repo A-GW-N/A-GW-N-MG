@@ -36,7 +36,15 @@ type EditableBlock = Pick<
 
 type EditableContent = Pick<
   HomepageContentRow,
-  "content_key" | "title" | "hero_title" | "hero_subtitle" | "markdown"
+  | "content_key"
+  | "title"
+  | "hero_title"
+  | "hero_subtitle"
+  | "entrance_badge"
+  | "entrance_brand"
+  | "entrance_title"
+  | "entrance_subtitle"
+  | "markdown"
 >;
 
 type EditorState =
@@ -424,32 +432,94 @@ function EditorModal({
                   className="rounded-2xl border border-black/10 bg-white/72 px-4 py-3 text-foreground outline-none transition-colors focus:border-black/24 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:border-white/24"
                 />
               </label>
-              <label className="grid gap-2 text-sm">
-                <span className="font-medium text-foreground/74 dark:text-white/74">Welcome Title</span>
-                <input
-                  value={localState.draft.hero_title ?? ""}
-                  onChange={(event) =>
-                    setLocalState({
-                      ...localState,
-                      draft: {...localState.draft, hero_title: event.target.value},
-                    })
-                  }
-                  className="rounded-2xl border border-black/10 bg-white/72 px-4 py-3 text-foreground outline-none transition-colors focus:border-black/24 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:border-white/24"
-                />
-              </label>
-              <label className="grid gap-2 text-sm">
-                <span className="font-medium text-foreground/74 dark:text-white/74">Welcome Subtitle</span>
-                <input
-                  value={localState.draft.hero_subtitle ?? ""}
-                  onChange={(event) =>
-                    setLocalState({
-                      ...localState,
-                      draft: {...localState.draft, hero_subtitle: event.target.value},
-                    })
-                  }
-                  className="rounded-2xl border border-black/10 bg-white/72 px-4 py-3 text-foreground outline-none transition-colors focus:border-black/24 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:border-white/24"
-                />
-              </label>
+              <div className="grid gap-4 rounded-[1.45rem] border border-black/8 bg-white/45 p-4 dark:border-white/8 dark:bg-white/[0.025] md:grid-cols-2">
+                <p className="text-xs font-semibold uppercase tracking-[0.26em] text-foreground/36 dark:text-white/36 md:col-span-2">
+                  Homepage Header
+                </p>
+                <label className="grid gap-2 text-sm">
+                  <span className="font-medium text-foreground/74 dark:text-white/74">Welcome Title</span>
+                  <input
+                    value={localState.draft.hero_title ?? ""}
+                    onChange={(event) =>
+                      setLocalState({
+                        ...localState,
+                        draft: {...localState.draft, hero_title: event.target.value},
+                      })
+                    }
+                    className="rounded-2xl border border-black/10 bg-white/72 px-4 py-3 text-foreground outline-none transition-colors focus:border-black/24 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:border-white/24"
+                  />
+                </label>
+                <label className="grid gap-2 text-sm">
+                  <span className="font-medium text-foreground/74 dark:text-white/74">Welcome Subtitle</span>
+                  <input
+                    value={localState.draft.hero_subtitle ?? ""}
+                    onChange={(event) =>
+                      setLocalState({
+                        ...localState,
+                        draft: {...localState.draft, hero_subtitle: event.target.value},
+                      })
+                    }
+                    className="rounded-2xl border border-black/10 bg-white/72 px-4 py-3 text-foreground outline-none transition-colors focus:border-black/24 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:border-white/24"
+                  />
+                </label>
+              </div>
+              <div className="grid gap-4 rounded-[1.45rem] border border-black/8 bg-white/45 p-4 dark:border-white/8 dark:bg-white/[0.025] md:grid-cols-2">
+                <p className="text-xs font-semibold uppercase tracking-[0.26em] text-foreground/36 dark:text-white/36 md:col-span-2">
+                  Entrance Loading
+                </p>
+                <label className="grid gap-2 text-sm">
+                  <span className="font-medium text-foreground/74 dark:text-white/74">Badge</span>
+                  <input
+                    value={localState.draft.entrance_badge ?? ""}
+                    onChange={(event) =>
+                      setLocalState({
+                        ...localState,
+                        draft: {...localState.draft, entrance_badge: event.target.value},
+                      })
+                    }
+                    className="rounded-2xl border border-black/10 bg-white/72 px-4 py-3 text-foreground outline-none transition-colors focus:border-black/24 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:border-white/24"
+                  />
+                </label>
+                <label className="grid gap-2 text-sm">
+                  <span className="font-medium text-foreground/74 dark:text-white/74">Brand</span>
+                  <input
+                    value={localState.draft.entrance_brand ?? ""}
+                    onChange={(event) =>
+                      setLocalState({
+                        ...localState,
+                        draft: {...localState.draft, entrance_brand: event.target.value},
+                      })
+                    }
+                    className="rounded-2xl border border-black/10 bg-white/72 px-4 py-3 text-foreground outline-none transition-colors focus:border-black/24 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:border-white/24"
+                  />
+                </label>
+                <label className="grid gap-2 text-sm md:col-span-2">
+                  <span className="font-medium text-foreground/74 dark:text-white/74">Loading Title</span>
+                  <input
+                    value={localState.draft.entrance_title ?? ""}
+                    onChange={(event) =>
+                      setLocalState({
+                        ...localState,
+                        draft: {...localState.draft, entrance_title: event.target.value},
+                      })
+                    }
+                    className="rounded-2xl border border-black/10 bg-white/72 px-4 py-3 text-foreground outline-none transition-colors focus:border-black/24 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:border-white/24"
+                  />
+                </label>
+                <label className="grid gap-2 text-sm md:col-span-2">
+                  <span className="font-medium text-foreground/74 dark:text-white/74">Loading Subtitle</span>
+                  <input
+                    value={localState.draft.entrance_subtitle ?? ""}
+                    onChange={(event) =>
+                      setLocalState({
+                        ...localState,
+                        draft: {...localState.draft, entrance_subtitle: event.target.value},
+                      })
+                    }
+                    className="rounded-2xl border border-black/10 bg-white/72 px-4 py-3 text-foreground outline-none transition-colors focus:border-black/24 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:border-white/24"
+                  />
+                </label>
+              </div>
               <label className="grid gap-2 text-sm">
                 <span className="font-medium text-foreground/74 dark:text-white/74">Markdown</span>
                 <textarea
@@ -478,6 +548,22 @@ function EditorModal({
                 </h5>
                 <p className="mt-2 text-lg font-semibold text-foreground/55 dark:text-white/55">
                   {localState.draft.hero_subtitle || "INTELLIGENCE MONITOR"}
+                </p>
+              </div>
+              <div className="mt-4 rounded-[1.2rem] border border-black/8 bg-white/62 p-4 text-center dark:border-white/8 dark:bg-black/20">
+                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-foreground/40 dark:text-white/40">
+                  Entrance Loading
+                </p>
+                <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-black/8 bg-white/65 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.24em] text-foreground/42 dark:border-white/10 dark:bg-white/[0.035] dark:text-white/42">
+                  {localState.draft.entrance_badge || "Welcome Sequence"}
+                  <span className="h-1.5 w-1.5 rounded-full bg-foreground/55 dark:bg-white/60" />
+                  {localState.draft.entrance_brand || "A-GW-N"}
+                </div>
+                <h5 className="mx-auto mt-4 max-w-[28rem] text-2xl font-black leading-tight tracking-[-0.04em]">
+                  {localState.draft.entrance_title || "欢迎来到 A-GW-N 主页面"}
+                </h5>
+                <p className="mx-auto mt-2 max-w-[26rem] text-sm leading-6 text-muted-foreground dark:text-white/46">
+                  {localState.draft.entrance_subtitle || "正在载入主页面矩阵与信息板，请稍候。"}
                 </p>
               </div>
               <div className="mt-5 max-h-[480px] overflow-y-auto rounded-[1.45rem] border border-black/8 bg-white/62 p-5 dark:border-white/8 dark:bg-black/20">
@@ -523,6 +609,10 @@ export function HomepageBlockManager({
     title: initialContent.title,
     hero_title: initialContent.hero_title ?? "",
     hero_subtitle: initialContent.hero_subtitle ?? "",
+    entrance_badge: initialContent.entrance_badge ?? "",
+    entrance_brand: initialContent.entrance_brand ?? "",
+    entrance_title: initialContent.entrance_title ?? "",
+    entrance_subtitle: initialContent.entrance_subtitle ?? "",
     markdown: initialContent.markdown,
   });
   const [isPending, startTransition] = useTransition();
@@ -656,6 +746,10 @@ export function HomepageBlockManager({
           title: result.content.title,
           hero_title: result.content.hero_title ?? "",
           hero_subtitle: result.content.hero_subtitle ?? "",
+          entrance_badge: result.content.entrance_badge ?? "",
+          entrance_brand: result.content.entrance_brand ?? "",
+          entrance_title: result.content.entrance_title ?? "",
+          entrance_subtitle: result.content.entrance_subtitle ?? "",
           markdown: result.content.markdown,
         });
         setStatusMessage("主页内容已保存到数据库");

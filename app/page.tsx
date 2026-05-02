@@ -15,7 +15,7 @@ export const revalidate = 0;
 export default async function Home() {
   const [blocks, infoPanel] = await Promise.all([loadHomepageBlocks(), loadHomepageContent()]);
   return (
-    <HomePageEntrance>
+    <HomePageEntrance content={infoPanel}>
       <HomePage blocks={blocks} infoPanel={infoPanel} />
     </HomePageEntrance>
   );

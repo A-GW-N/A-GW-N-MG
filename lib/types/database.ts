@@ -119,6 +119,10 @@ export interface HomepageContentRow {
   title: string;
   hero_title?: string | null;
   hero_subtitle?: string | null;
+  entrance_badge?: string | null;
+  entrance_brand?: string | null;
+  entrance_title?: string | null;
+  entrance_subtitle?: string | null;
   markdown: string;
   created_at?: string;
   updated_at?: string;

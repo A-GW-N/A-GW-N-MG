@@ -4,15 +4,29 @@ import {useEffect, useState} from "react";
 
 interface HomePageEntranceProps {
   children: React.ReactNode;
+  content?: {
+    entrance_badge?: string | null;
+    entrance_brand?: string | null;
+    entrance_title?: string | null;
+    entrance_subtitle?: string | null;
+  };
 }
 
 type EntrancePhase = "intro" | "reveal" | "done";
 const HOME_ENTRANCE_SEEN_KEY = "agwn-home-entrance-seen";
+const DEFAULT_ENTRANCE_BADGE = "Welcome Sequence";
+const DEFAULT_ENTRANCE_BRAND = "A-GW-N";
+const DEFAULT_ENTRANCE_TITLE = "欢迎来到 A-GW-N 主页面";
+const DEFAULT_ENTRANCE_SUBTITLE = "正在载入主页面矩阵与信息板，请稍候。";
 
-export function HomePageEntrance({children}: HomePageEntranceProps) {
+export function HomePageEntrance({children, content}: HomePageEntranceProps) {
   const [phase, setPhase] = useState<EntrancePhase>("intro");
   const [shouldAnimate, setShouldAnimate] = useState(false);
   const [isReady, setIsReady] = useState(false);
+  const entranceBadge = content?.entrance_badge?.trim() || DEFAULT_ENTRANCE_BADGE;
+  const entranceBrand = content?.entrance_brand?.trim() || DEFAULT_ENTRANCE_BRAND;
+  const entranceTitle = content?.entrance_title?.trim() || DEFAULT_ENTRANCE_TITLE;
+  const entranceSubtitle = content?.entrance_subtitle?.trim() || DEFAULT_ENTRANCE_SUBTITLE;
 
   useEffect(() => {
     const hasSeenEntrance = window.sessionStorage.getItem(HOME_ENTRANCE_SEEN_KEY) === "true";
@@ -79,15 +93,15 @@ export function HomePageEntrance({children}: HomePageEntranceProps) {
           <div className="relative mx-auto flex w-full max-w-[860px] flex-col items-center px-6 text-center">
             <div className="animate-[agwn-fade-up_900ms_cubic-bezier(0.22,1,0.36,1)_both]">
               <div className="inline-flex items-center gap-2 rounded-full border border-black/8 bg-white/65 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-[0.34em] text-foreground/42 dark:border-white/10 dark:bg-white/[0.035] dark:text-white/42">
-                Welcome Sequence
+                {entranceBadge}
                 <span className="h-1.5 w-1.5 rounded-full bg-foreground/55 dark:bg-white/60" />
-                A-GW-N
+                {entranceBrand}
               </div>
               <h1 className="mt-6 text-3xl font-black tracking-[-0.06em] sm:text-5xl">
-                欢迎来到 A-GW-N 主页面
+                {entranceTitle}
               </h1>
               <p className="mx-auto mt-4 max-w-[34rem] text-sm leading-7 text-muted-foreground dark:text-white/46 sm:text-base">
-                正在载入主页面矩阵与信息板，请稍候。
+                {entranceSubtitle}
               </p>
             </div>
 

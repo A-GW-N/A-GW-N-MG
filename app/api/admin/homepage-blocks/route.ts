@@ -42,6 +42,10 @@ export async function PUT(request: Request) {
         title: currentContent.title,
         hero_title: currentContent.hero_title ?? undefined,
         hero_subtitle: currentContent.hero_subtitle ?? undefined,
+        entrance_badge: currentContent.entrance_badge ?? undefined,
+        entrance_brand: currentContent.entrance_brand ?? undefined,
+        entrance_title: currentContent.entrance_title ?? undefined,
+        entrance_subtitle: currentContent.entrance_subtitle ?? undefined,
         markdown: currentContent.markdown,
       }
     );

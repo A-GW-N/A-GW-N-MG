@@ -118,6 +118,10 @@ CREATE TABLE IF NOT EXISTS public.homepage_content (
   title text NOT NULL DEFAULT 'Information',
   hero_title text NOT NULL DEFAULT 'AI SERVICES',
   hero_subtitle text NOT NULL DEFAULT 'INTELLIGENCE MONITOR',
+  entrance_badge text NOT NULL DEFAULT 'Welcome Sequence',
+  entrance_brand text NOT NULL DEFAULT 'A-GW-N',
+  entrance_title text NOT NULL DEFAULT '欢迎来到 A-GW-N 主页面',
+  entrance_subtitle text NOT NULL DEFAULT '正在载入主页面矩阵与信息板，请稍候。',
   markdown text NOT NULL DEFAULT '',
   created_at timestamptz DEFAULT now(),
   updated_at timestamptz DEFAULT now()
@@ -139,6 +143,18 @@ ALTER TABLE public.homepage_content
 
 ALTER TABLE public.homepage_content
   ADD COLUMN IF NOT EXISTS hero_subtitle text NOT NULL DEFAULT 'INTELLIGENCE MONITOR';
+
+ALTER TABLE public.homepage_content
+  ADD COLUMN IF NOT EXISTS entrance_badge text NOT NULL DEFAULT 'Welcome Sequence';
+
+ALTER TABLE public.homepage_content
+  ADD COLUMN IF NOT EXISTS entrance_brand text NOT NULL DEFAULT 'A-GW-N';
+
+ALTER TABLE public.homepage_content
+  ADD COLUMN IF NOT EXISTS entrance_title text NOT NULL DEFAULT '欢迎来到 A-GW-N 主页面';
+
+ALTER TABLE public.homepage_content
+  ADD COLUMN IF NOT EXISTS entrance_subtitle text NOT NULL DEFAULT '正在载入主页面矩阵与信息板，请稍候。';
 
 ALTER TABLE public.homepage_blocks
   ADD COLUMN IF NOT EXISTS description text NOT NULL DEFAULT '';
@@ -545,6 +561,10 @@ COMMENT ON COLUMN public.homepage_content.content_key IS '信息板唯一键，�
 COMMENT ON COLUMN public.homepage_content.title IS '信息板标题';
 COMMENT ON COLUMN public.homepage_content.hero_title IS '首页欢迎主标题';
 COMMENT ON COLUMN public.homepage_content.hero_subtitle IS '首页欢迎副标题';
+COMMENT ON COLUMN public.homepage_content.entrance_badge IS '首页首次进入加载欢迎页徽标文本';
+COMMENT ON COLUMN public.homepage_content.entrance_brand IS '首页首次进入加载欢迎页品牌文本';
+COMMENT ON COLUMN public.homepage_content.entrance_title IS '首页首次进入加载欢迎页主标题';
+COMMENT ON COLUMN public.homepage_content.entrance_subtitle IS '首页首次进入加载欢迎页副标题';
 COMMENT ON COLUMN public.homepage_content.markdown IS '信息板 Markdown 正文';
 COMMENT ON COLUMN public.gateway_profiles.profile_key IS '稳定唯一键，用于代码引用和 Go 服务加载';
 COMMENT ON COLUMN public.gateway_profiles.provider_slug IS '上游 provider 标识';
