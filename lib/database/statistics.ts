@@ -381,8 +381,8 @@ async function loadLogDerivedStatisticsDashboard(): Promise<StatisticsDashboardD
     totalUsage += usageValue;
 
     if (createdAt >= minuteAgo) {
-      rpm += asNumber(log.rpm_count) || 1;
-      tpm += asNumber(log.tpm_count) || usageValue;
+      rpm += 1;
+      tpm += usageValue;
     }
 
     const trendKey = formatTenMinuteKey(createdAt);

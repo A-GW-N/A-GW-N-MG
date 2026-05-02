@@ -7,6 +7,8 @@ import {buildAppUrl} from "@/lib/utils/request-url";
 const DEFAULT_LINUXDO_AUTHORIZATION_URL = "https://connect.linux.do/oauth2/authorize";
 const DEFAULT_LINUXDO_TOKEN_URL = "https://connect.linuxdo.org/oauth2/token";
 const DEFAULT_LINUXDO_PROFILE_URL = "https://connect.linuxdo.org/api/user";
+const LINUXDO_SERVER_USER_AGENT =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
 
 export const USER_OAUTH_STATE_COOKIE = "agwn_user_oauth_state";
 export const USER_OAUTH_REDIRECT_COOKIE = "agwn_user_oauth_redirect";
@@ -228,6 +230,8 @@ export async function exchangeLinuxdoCode(code: string, request?: Request) {
         Authorization: `Basic ${encodeBasicAuth(config.clientId, config.clientSecret)}`,
         "Content-Type": "application/x-www-form-urlencoded",
         Accept: "application/json",
+        "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+        "User-Agent": LINUXDO_SERVER_USER_AGENT,
       },
       body,
       cache: "no-store",
@@ -258,6 +262,8 @@ export async function fetchLinuxdoProfile(accessToken: string) {
       headers: {
         Authorization: `Bearer ${accessToken}`,
         Accept: "application/json",
+        "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+        "User-Agent": LINUXDO_SERVER_USER_AGENT,
       },
       cache: "no-store",
     });

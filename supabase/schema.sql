@@ -863,9 +863,9 @@ SELECT
   COALESCE(SUM(COALESCE(l.total_tokens, 0)), 0)::bigint AS total_tokens,
   COALESCE(SUM(COALESCE(l.input_tokens, 0)), 0)::bigint AS input_tokens,
   COALESCE(SUM(COALESCE(l.output_tokens, 0)), 0)::bigint AS output_tokens,
-  COALESCE(SUM(COALESCE(l.rpm_count, 0)), 0)::bigint AS rpm_count,
-  COALESCE(SUM(COALESCE(l.tpm_count, 0)), 0)::bigint AS tpm_count,
-  MAX(l.created_at) AS last_used_at
+  MAX(l.created_at) AS last_used_at,
+  COUNT(l.id) FILTER (WHERE l.created_at >= NOW() - INTERVAL '1 minute')::bigint AS rpm_count,
+  COALESCE(SUM(COALESCE(NULLIF(l.total_tokens, 0), COALESCE(l.input_tokens, 0) + COALESCE(l.output_tokens, 0), 0)) FILTER (WHERE l.created_at >= NOW() - INTERVAL '1 minute'), 0)::bigint AS tpm_count
 FROM public.gateway_api_keys k
 LEFT JOIN public.gateway_request_logs l
   ON l.gateway_api_key_id = k.id
@@ -882,9 +882,9 @@ SELECT
   COALESCE(SUM(COALESCE(l.total_tokens, 0)), 0)::bigint AS total_tokens,
   COALESCE(SUM(COALESCE(l.input_tokens, 0)), 0)::bigint AS input_tokens,
   COALESCE(SUM(COALESCE(l.output_tokens, 0)), 0)::bigint AS output_tokens,
-  COALESCE(SUM(COALESCE(l.rpm_count, 0)), 0)::bigint AS rpm_count,
-  COALESCE(SUM(COALESCE(l.tpm_count, 0)), 0)::bigint AS tpm_count,
-  MAX(l.created_at) AS last_request_at
+  MAX(l.created_at) AS last_request_at,
+  COUNT(l.id) FILTER (WHERE l.created_at >= NOW() - INTERVAL '1 minute')::bigint AS rpm_count,
+  COALESCE(SUM(COALESCE(NULLIF(l.total_tokens, 0), COALESCE(l.input_tokens, 0) + COALESCE(l.output_tokens, 0), 0)) FILTER (WHERE l.created_at >= NOW() - INTERVAL '1 minute'), 0)::bigint AS tpm_count
 FROM public.gateway_request_logs l
 WHERE l.user_id IS NOT NULL
 GROUP BY l.user_id;

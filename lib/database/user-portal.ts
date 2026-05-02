@@ -8,6 +8,7 @@ import {loadUserGatewayApiKey, type GatewayApiKeySummary} from "@/lib/database/g
 const GATEWAY_REQUEST_LOGS_TABLE = "gateway_request_logs";
 const USER_USAGE_SUMMARY_VIEW = "gateway_user_usage_summary";
 const USER_MODEL_USAGE_VIEW = "gateway_user_model_usage";
+const RATE_WINDOW_MS = 60 * 1000;
 
 export interface UserUsageSummaryRow {
   user_id: string;
@@ -116,19 +117,24 @@ async function loadFallbackUsage(userId: string) {
 
   const rows = (data as GatewayRequestLogRow[] | null) ?? [];
   const modelMap = new Map<string, UserModelUsageRow>();
+  const rateWindowStart = new Date(Date.now() - RATE_WINDOW_MS);
 
   const usage = rows.reduce<UserUsageSummaryRow>(
     (accumulator, row) => {
       const totalTokens =
         toNumber(row.total_tokens) || toNumber(row.input_tokens) + toNumber(row.output_tokens);
+      const createdAt = row.created_at ? new Date(row.created_at) : null;
+      const isInRateWindow = createdAt !== null && !Number.isNaN(createdAt.getTime()) && createdAt >= rateWindowStart;
 
       accumulator.success_count += row.success ? 1 : 0;
       accumulator.failed_count += row.success ? 0 : 1;
       accumulator.total_tokens += totalTokens;
       accumulator.input_tokens += toNumber(row.input_tokens);
       accumulator.output_tokens += toNumber(row.output_tokens);
-      accumulator.rpm_count += toNumber(row.rpm_count) || 1;
-      accumulator.tpm_count += toNumber(row.tpm_count) || totalTokens;
+      if (isInRateWindow) {
+        accumulator.rpm_count += 1;
+        accumulator.tpm_count += totalTokens;
+      }
       accumulator.last_request_at ||= row.created_at ?? null;
 
       const modelName = row.mapped_model?.trim() || row.external_model?.trim() || "unknown";
@@ -164,10 +170,35 @@ async function loadFallbackUsage(userId: string) {
   };
 }
 
+async function loadUserRateUsage(userId: string) {
+  const supabase = createAdminClient();
+  const since = new Date(Date.now() - RATE_WINDOW_MS).toISOString();
+  const {data, error, count} = await supabase
+    .from(GATEWAY_REQUEST_LOGS_TABLE)
+    .select("id, total_tokens, input_tokens, output_tokens", {count: "exact"})
+    .eq("user_id", userId)
+    .gte("created_at", since);
+
+  if (error) {
+    if (!isMissingRelation(error, GATEWAY_REQUEST_LOGS_TABLE)) {
+      console.error("Failed to load user RPM/TPM:", error);
+    }
+    return {rpm_count: 0, tpm_count: 0};
+  }
+
+  const rows = (data as GatewayRequestLogRow[] | null) ?? [];
+  return {
+    rpm_count: count ?? rows.length,
+    tpm_count: rows.reduce((sum, row) => (
+      sum + (toNumber(row.total_tokens) || toNumber(row.input_tokens) + toNumber(row.output_tokens))
+    ), 0),
+  };
+}
+
 export async function loadUserPortalData(userId: string): Promise<UserPortalData> {
   const supabase = createAdminClient();
   const ownedKeyPromise = loadUserGatewayApiKey(userId);
-  const [usageResult, modelResult, logResult, ownedKey] = await Promise.all([
+  const [usageResult, modelResult, logResult, rateUsage, ownedKey] = await Promise.all([
     supabase.from(USER_USAGE_SUMMARY_VIEW).select("*").eq("user_id", userId).maybeSingle(),
     supabase
       .from(USER_MODEL_USAGE_VIEW)
@@ -182,6 +213,7 @@ export async function loadUserPortalData(userId: string): Promise<UserPortalData
       .eq("user_id", userId)
       .order("created_at", {ascending: false})
       .limit(20),
+    loadUserRateUsage(userId),
     ownedKeyPromise,
   ]);
 
@@ -211,7 +243,11 @@ export async function loadUserPortalData(userId: string): Promise<UserPortalData
 
   return {
     ownedKey,
-    usage: (usageResult.data as UserUsageSummaryRow | null) ?? emptyUsage(userId),
+    usage: {
+      ...((usageResult.data as UserUsageSummaryRow | null) ?? emptyUsage(userId)),
+      rpm_count: rateUsage.rpm_count,
+      tpm_count: rateUsage.tpm_count,
+    },
     models: (modelResult.data as UserModelUsageRow[] | null) ?? [],
     logs,
   };
